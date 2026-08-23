@@ -35,7 +35,7 @@ build-32:
 build-64:
 	@$(MAKE) ARCH=x64 BUILD_MODE="Release 64-Bit" build
 
-run: build
+run:
 	@"$(POWERSHELL)" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)\tools\build.ps1" -Action Run -Architecture "$(ARCH)" -LazarusDir "$(LAZARUS_DIR)" -LazBuild "$(LAZBUILD)"
 
 clean:

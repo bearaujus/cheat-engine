@@ -77,6 +77,8 @@ make clean
 
 The default build is the 64-bit release and writes `Cheat Engine\bin\cheatengine-x86_64.exe`. The 32-bit release writes `Cheat Engine\bin\cheatengine-i386.exe`. `make run` starts the selected executable with `Cheat Engine\bin` as its working directory so the checked-in runtime files are used.
 
+For the bundled FPC 3.2.2 compiler, the helper temporarily uses optimization level 2 for the selected build mode. This avoids an intermittent FPC internal compiler error; the committed Lazarus project file is restored byte-for-byte after each build.
+
 The Makefile does not install files, drivers, services, or system-wide settings. The broader install/package workflow will be added separately after the complete distribution scope is defined. To use another Lazarus copy, override the path without changing project files:
 
 ```text

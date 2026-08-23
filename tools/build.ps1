@@ -110,8 +110,16 @@ function Assert-Tools {
 
 function Invoke-LazBuild([string]$ResolvedLazBuild) {
     $projectBytes = [System.IO.File]::ReadAllBytes($projectFile)
+    $projectText = [System.Text.Encoding]::UTF8.GetString($projectBytes)
+    $buildModePattern = '(?s)(<Item\d+ Name="' + [regex]::Escape($BuildMode) + '".*?<OptimizationLevel Value=")3(".*?</Item\d+>)'
+    $buildProjectText = [regex]::Replace($projectText, $buildModePattern, '${1}2${2}', 1)
     Write-Host "Building $Architecture with mode '$BuildMode'..."
     try {
+        if ($buildProjectText -ne $projectText) {
+            [System.IO.File]::WriteAllText($projectFile, $buildProjectText, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Using optimization level 2 for FPC 3.2.2 compatibility."
+        }
+
         & $ResolvedLazBuild $projectFile "--build-mode=$BuildMode"
         if ($LASTEXITCODE -ne 0) {
             throw "lazbuild failed with exit code $LASTEXITCODE."
