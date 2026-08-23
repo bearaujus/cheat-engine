@@ -1,0 +1,205 @@
+object TodoDialog: TTodoDialog
+  Left = 186
+  Height = 244
+  Top = 86
+  Width = 384
+  ActiveControl = TodoMemo
+  Caption = 'Insert Todo'
+  ClientHeight = 244
+  ClientWidth = 384
+  Constraints.MinHeight = 190
+  Constraints.MinWidth = 384
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  Position = poScreenCenter
+  SessionProperties = 'chkAlternateTokens.Checked;rdoDone.Checked;rdoNote.Checked;rdoToDo.Checked;OwnerEdit.Text'
+  ShowHint = True
+  LCLVersion = '2.1.0.0'
+  object TodoLabel: TLabel
+    Left = 8
+    Height = 15
+    Top = 8
+    Width = 25
+    Caption = 'Text:'
+    FocusControl = TodoMemo
+    ParentColor = False
+  end
+  object PriorityLabel: TLabel
+    AnchorSideLeft.Control = TodoLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideBottom.Control = PriorityEdit
+    Left = 8
+    Height = 15
+    Top = 90
+    Width = 38
+    Anchors = [akLeft, akBottom]
+    BorderSpacing.Bottom = 2
+    Caption = 'Priority'
+    ParentColor = False
+  end
+  object OwnerLabel: TLabel
+    AnchorSideTop.Control = PriorityLabel
+    Left = 77
+    Height = 15
+    Top = 90
+    Width = 35
+    Caption = 'Owner'
+    ParentColor = False
+  end
+  object CategoryLabel: TLabel
+    AnchorSideTop.Control = PriorityLabel
+    Left = 248
+    Height = 15
+    Top = 90
+    Width = 48
+    Caption = 'Category'
+    ParentColor = False
+  end
+  object TodoMemo: TMemo
+    AnchorSideLeft.Control = TodoLabel
+    AnchorSideTop.Control = TodoLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = PriorityLabel
+    Left = 8
+    Height = 59
+    Top = 25
+    Width = 370
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 6
+    BorderSpacing.Bottom = 6
+    ScrollBars = ssAutoBoth
+    TabOrder = 0
+  end
+  object OwnerEdit: TEdit
+    AnchorSideLeft.Control = OwnerLabel
+    AnchorSideTop.Control = OwnerLabel
+    AnchorSideTop.Side = asrBottom
+    Left = 77
+    Height = 23
+    Top = 107
+    Width = 162
+    BorderSpacing.Top = 2
+    TabOrder = 2
+  end
+  object CategoryEdit: TEdit
+    AnchorSideLeft.Control = CategoryLabel
+    AnchorSideTop.Control = CategoryLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Side = asrBottom
+    Left = 248
+    Height = 23
+    Top = 107
+    Width = 130
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 6
+    TabOrder = 3
+  end
+  object BtnPanel: TButtonPanel
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 26
+    Top = 212
+    Width = 372
+    OKButton.Name = 'OKButton'
+    OKButton.DefaultCaption = True
+    HelpButton.Name = 'HelpButton'
+    HelpButton.DefaultCaption = True
+    CloseButton.Name = 'CloseButton'
+    CloseButton.DefaultCaption = True
+    CancelButton.Name = 'CancelButton'
+    CancelButton.DefaultCaption = True
+    TabOrder = 6
+    ShowButtons = [pbOK, pbCancel]
+    ShowBevel = False
+  end
+  object PriorityEdit: TSpinEdit
+    AnchorSideLeft.Control = PriorityLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideBottom.Control = grpboxToDoType
+    Left = 8
+    Height = 23
+    Top = 107
+    Width = 58
+    Anchors = [akLeft, akBottom]
+    BorderSpacing.Top = 2
+    BorderSpacing.Bottom = 6
+    TabOrder = 1
+  end
+  object grpboxToDoType: TGroupBox
+    AnchorSideLeft.Control = PriorityLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = CategoryEdit
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = chkAlternateTokens
+    Left = 8
+    Height = 45
+    Top = 136
+    Width = 370
+    Anchors = [akLeft, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Bottom = 6
+    Caption = 'ToDo type'
+    ClientHeight = 25
+    ClientWidth = 366
+    TabOrder = 4
+    object rdoToDo: TRadioButton
+      Left = 6
+      Height = 19
+      Top = 0
+      Width = 49
+      BorderSpacing.Left = 6
+      BorderSpacing.Bottom = 6
+      Caption = 'ToDo'
+      Checked = True
+      OnChange = rdoToDoTypeChange
+      TabOrder = 0
+      TabStop = True
+    end
+    object rdoDone: TRadioButton
+      Tag = 1
+      Left = 160
+      Height = 19
+      Top = 0
+      Width = 48
+      Anchors = [akTop]
+      Caption = 'Done'
+      OnChange = rdoToDoTypeChange
+      TabOrder = 1
+    end
+    object rdoNote: TRadioButton
+      Tag = 2
+      Left = 311
+      Height = 19
+      Top = 0
+      Width = 46
+      Anchors = [akTop, akRight]
+      Caption = 'Note'
+      OnChange = rdoToDoTypeChange
+      TabOrder = 2
+    end
+  end
+  object chkAlternateTokens: TCheckBox
+    AnchorSideLeft.Control = grpboxToDoType
+    AnchorSideTop.Side = asrBottom
+    AnchorSideBottom.Control = BtnPanel
+    Left = 8
+    Height = 19
+    Top = 187
+    Width = 128
+    Anchors = [akLeft, akBottom]
+    BorderSpacing.Bottom = 6
+    Caption = 'UseAlternate Tokens'
+    TabOrder = 5
+  end
+  object XMLPropStorage: TXMLPropStorage
+    StoredValues = <>
+    FileName = 'todolistdialogoptions.xml'
+    Active = False
+    left = 224
+    top = 8
+  end
+end
