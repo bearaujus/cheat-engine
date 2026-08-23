@@ -59,3 +59,30 @@ Cheat Engine is a development environment focused on modding games and applicati
      dbkkernel.sln: for kernelmode functions (settings->extra) You will need to build the no-sig version and either boot with unsigned driver support, or sign the driver yourself    
     
 *.SLN files require visual studio (Usually 2017)
+
+## Local Windows build and run
+
+The repository includes a portable Lazarus 2.2.2/FPC 3.2.2 toolchain under `tools\lazarus`. The toolchain is used only to build the source checkout; no prebuilt Cheat Engine release is downloaded or executed.
+
+From a Windows shell with GNU Make available:
+
+```text
+make check-tools
+make build
+make run
+make build-32
+make run ARCH=x86 BUILD_MODE="Release 32-Bit"
+make clean
+```
+
+The default build is the 64-bit release and writes `Cheat Engine\bin\cheatengine-x86_64.exe`. The 32-bit release writes `Cheat Engine\bin\cheatengine-i386.exe`. `make run` starts the selected executable with `Cheat Engine\bin` as its working directory so the checked-in runtime files are used. It passes `NOAUTORUN` and `NOFIRSTTIME`, so local runs do not load autorun extensions or show first-run language/tutorial prompts; normal launches without those arguments are unchanged.
+
+For the bundled FPC 3.2.2 compiler, the helper temporarily uses optimization level 0 for the selected build mode. This avoids an intermittent FPC internal compiler error; the committed Lazarus project file is restored byte-for-byte after each build.
+
+The Makefile does not install files, drivers, services, or system-wide settings. The broader install/package workflow will be added separately after the complete distribution scope is defined. To use another Lazarus copy, override the path without changing project files:
+
+```text
+make LAZARUS_DIR=C:\path\to\lazarus build
+```
+
+The bundled toolchain is based on the official Lazarus 2.2.2 Windows 64-bit installer and i386 cross-compiler. Their SHA-256 checksums are listed on the official [Lazarus checksums page](https://www.lazarus-ide.org/index.php?page=checksums). The bundle includes upstream license files; review the applicable licenses before redistributing it.

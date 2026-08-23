@@ -1,0 +1,342 @@
+object Pas2jsOptionsFrame: TPas2jsOptionsFrame
+  Left = 0
+  Height = 479
+  Top = 0
+  Width = 507
+  BorderSpacing.Left = 6
+  ClientHeight = 479
+  ClientWidth = 507
+  ParentShowHint = False
+  ShowHint = True
+  TabOrder = 0
+  DesignLeft = 388
+  DesignTop = 200
+  object Pas2jsPathLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = Owner
+    Left = 6
+    Height = 16
+    Top = 6
+    Width = 174
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'Pas2JS command executable'
+    ParentColor = False
+    ParentShowHint = False
+    ShowHint = True
+  end
+  object Pas2jsPathComboBox: TComboBox
+    AnchorSideLeft.Control = Pas2jsPathLabel
+    AnchorSideTop.Control = Pas2jsPathLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Pas2jsPathBrowseButton
+    Left = 6
+    Height = 27
+    Top = 24
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 0
+  end
+  object Pas2jsPathBrowseButton: TButton
+    AnchorSideTop.Control = Pas2jsPathComboBox
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = Pas2jsPathComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 27
+    Top = 24
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = Pas2jsPathBrowseButtonClick
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 1
+  end
+  object HTTPServerCmdLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = Pas2jsPathComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 59
+    Width = 179
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 8
+    Caption = 'Simple HTTP Server command'
+    ParentColor = False
+  end
+  object HTTPServerBrowseButton: TButton
+    AnchorSideTop.Control = HTTPServerCmdLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = HTTPServerComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 29
+    Top = 75
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = HTTPServerBrowseButtonClick
+    TabOrder = 2
+  end
+  object HTTPServerComboBox: TComboBox
+    AnchorSideLeft.Control = HTTPServerCmdLabel
+    AnchorSideTop.Control = HTTPServerCmdLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = HTTPServerBrowseButton
+    Left = 6
+    Height = 27
+    Top = 77
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 3
+  end
+  object ServerPortSpinEdit: TSpinEdit
+    AnchorSideLeft.Control = ServerPortLabel
+    AnchorSideTop.Control = ServerPortLabel
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 27
+    Top = 130
+    Width = 74
+    BorderSpacing.Top = 2
+    MaxValue = 65353
+    MinValue = 1024
+    TabOrder = 4
+    Value = 3000
+  end
+  object ServerPortLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = HTTPServerComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 112
+    Width = 124
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 8
+    Caption = 'Standard server port'
+    ParentColor = False
+  end
+  object BrowserComboBox: TComboBox
+    AnchorSideLeft.Control = BrowserLabel
+    AnchorSideTop.Control = BrowserLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = BBrowserBrowseButton
+    Left = 6
+    Height = 27
+    Top = 278
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 5
+    Text = 'BrowserComboBox'
+  end
+  object BrowserLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = HTTPServerOptionsMemo
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 260
+    Width = 283
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'Browser to launch when opening project HTML'
+    ParentColor = False
+  end
+  object BBrowserBrowseButton: TButton
+    AnchorSideTop.Control = BrowserComboBox
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = BrowserComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 27
+    Top = 278
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = BBrowserBrowseButtonClick
+    TabOrder = 6
+  end
+  object NodeJSLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = BrowserComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 311
+    Width = 114
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'Node.js executable'
+    ParentColor = False
+  end
+  object NodeJSComboBox: TComboBox
+    AnchorSideLeft.Control = NodeJSLabel
+    AnchorSideTop.Control = NodeJSLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = NodeJSBrowseButton
+    Left = 6
+    Height = 27
+    Top = 329
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 7
+    Text = 'NodeJSComboBox'
+  end
+  object NodeJSBrowseButton: TButton
+    AnchorSideTop.Control = NodeJSComboBox
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = NodeJSComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 27
+    Top = 329
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = NodeJSBrowseButtonClick
+    TabOrder = 8
+  end
+  object HTTPServerOptionsMemo: TMemo
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = HTTPServerOptsLabel
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    Left = 6
+    Height = 73
+    Top = 181
+    Width = 495
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 6
+    TabOrder = 9
+  end
+  object HTTPServerOptsLabel: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ServerPortSpinEdit
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 163
+    Width = 327
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'HTTP Server extra command-line options (one per line)'
+    ParentColor = False
+  end
+  object lblAtomTemplateDir: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = NodeJSComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 362
+    Width = 200
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'Atom package template directory'
+    ParentColor = False
+  end
+  object AtomTemplateDirComboBox: TComboBox
+    AnchorSideLeft.Control = lblAtomTemplateDir
+    AnchorSideTop.Control = lblAtomTemplateDir
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = NodeJSBrowseButton
+    Left = 6
+    Height = 27
+    Top = 380
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 10
+    Text = 'AtomTemplateDirComboBox'
+  end
+  object AtomTemplateDirBrowseButton: TButton
+    AnchorSideTop.Control = AtomTemplateDirComboBox
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = AtomTemplateDirComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 27
+    Top = 380
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = AtomTemplateDirBrowseButtonClick
+    TabOrder = 11
+  end
+  object lblVSCodeTemplateDir: TLabel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = AtomTemplateDirComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 6
+    Height = 16
+    Top = 413
+    Width = 227
+    BorderSpacing.Left = 6
+    BorderSpacing.Top = 6
+    Caption = 'VS Code Extension template directory'
+    ParentColor = False
+  end
+  object VSCodeTemplateDirComboBox: TComboBox
+    AnchorSideLeft.Control = lblVSCodeTemplateDir
+    AnchorSideTop.Control = lblVSCodeTemplateDir
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = NodeJSBrowseButton
+    Left = 6
+    Height = 27
+    Top = 431
+    Width = 472
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    ItemHeight = 0
+    TabOrder = 12
+    Text = 'VSCodeTemplateDirComboBox'
+  end
+  object VSCodeTemplateDirBrowseButton: TButton
+    AnchorSideTop.Control = VSCodeTemplateDirComboBox
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = VSCodeTemplateDirComboBox
+    AnchorSideBottom.Side = asrBottom
+    Left = 478
+    Height = 27
+    Top = 431
+    Width = 23
+    Anchors = [akTop, akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Right = 6
+    Caption = '...'
+    OnClick = VSCodeTemplateDirBrowseButtonClick
+    TabOrder = 13
+  end
+end

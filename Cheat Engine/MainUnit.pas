@@ -1103,6 +1103,7 @@ var
   MainForm: TMainForm;
   ToggleWindows: TTogglewindows;
   AutoAttachThread: TAutoAttachThread;
+  skipFirstTimeUser: boolean;
 
 resourcestring
   strPhysicalMemory = 'Physical Memory';
@@ -8512,27 +8513,30 @@ begin
     reg.WriteBool('First Time User', False);
 
 
-    if formsettings.lbLanguages.Count>1 then
+    if not skipFirstTimeUser then
     begin
-      i:=ShowSelectionList(self, rsLanguage, rsChooseLanguage, formSettings.lbLanguages.Items, s);
-      if i<>-1 then
+      if formsettings.lbLanguages.Count>1 then
       begin
-        formSettings.lbLanguages.ItemIndex:=i;
-        formsettings.btnSelectLanguage.Click;
+        i:=ShowSelectionList(self, rsLanguage, rsChooseLanguage, formSettings.lbLanguages.Items, s);
+        if i<>-1 then
+        begin
+          formSettings.lbLanguages.ItemIndex:=i;
+          formsettings.btnSelectLanguage.Click;
+        end;
       end;
-    end;
 
 
-    if messagedlg(rsTryTutorial, mtConfirmation, [mbYes, mbNo], 0) = mrYes then
-    {$ifdef darwin}
-      miTutorial64.click;
-    {$else}
-      {$ifdef cpu32}
-      miTutorial.Click;
+      if messagedlg(rsTryTutorial, mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+      {$ifdef darwin}
+        miTutorial64.click;
       {$else}
-      miTutorial64.Click;
+        {$ifdef cpu32}
+        miTutorial.Click;
+        {$else}
+        miTutorial64.Click;
+        {$endif}
       {$endif}
-    {$endif}
+    end;
   end;
 
   if reg.ValueExists('Show previous value column') then

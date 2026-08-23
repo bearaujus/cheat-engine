@@ -1,0 +1,242 @@
+object IDETodoWindow: TIDETodoWindow
+  Left = 714
+  Height = 300
+  Top = 510
+  Width = 837
+  ActiveControl = lvTodo
+  Caption = 'IDETodoWindow'
+  ClientHeight = 300
+  ClientWidth = 837
+  KeyPreview = True
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnKeyDown = FormKeyDown
+  OnShow = DoUpdateToDos
+  Position = poScreenCenter
+  SessionProperties = 'cboShowWhat.ItemIndex;chkListed.Checked;chkPackages.Checked;chkSourceEditor.Checked;chkUsed.Checked;lvTodo.Columns'
+  LCLVersion = '2.1.0.0'
+  object lvTodo: TListView
+    Left = 6
+    Height = 240
+    Top = 54
+    Width = 825
+    Align = alClient
+    AutoSortIndicator = True
+    BorderSpacing.Around = 6
+    Columns = <    
+      item
+        Caption = 'Type'
+        Width = 40
+      end    
+      item
+        Caption = 'Description'
+        Width = 400
+      end    
+      item
+        Caption = 'Priority'
+        Width = 40
+      end    
+      item
+        Caption = 'Module'
+        Width = 60
+      end    
+      item
+        Caption = 'Line'
+        Width = 40
+      end    
+      item
+        Caption = 'Owner'
+      end    
+      item
+        Caption = 'Category'
+      end>
+    ReadOnly = True
+    RowSelect = True
+    ScrollBars = ssAutoBoth
+    SortType = stData
+    TabOrder = 1
+    ViewStyle = vsReport
+    OnClick = lvTodoClick
+    OnCompare = lvTodoCompare
+  end
+  object ToolBar: TToolBar
+    Left = 0
+    Height = 48
+    Top = 0
+    Width = 837
+    AutoSize = True
+    ButtonHeight = 46
+    ButtonWidth = 47
+    Caption = 'ToolBar'
+    ParentShowHint = False
+    ShowCaptions = True
+    ShowHint = True
+    TabOrder = 0
+    object tbRefresh: TToolButton
+      Left = 1
+      Top = 2
+      Action = acRefresh
+      AutoSize = True
+    end
+    object tbGoto: TToolButton
+      Left = 48
+      Top = 2
+      Action = acGoto
+      AutoSize = True
+    end
+    object tbExport: TToolButton
+      Left = 95
+      Top = 2
+      Action = acExport
+      AutoSize = True
+    end
+    object N1: TToolButton
+      Left = 142
+      Height = 46
+      Top = 2
+      Caption = 'N1'
+      Style = tbsDivider
+    end
+    object grbOptions: TGroupBox
+      AnchorSideTop.Side = asrCenter
+      Left = 262
+      Height = 39
+      Top = 2
+      Width = 221
+      AutoSize = True
+      Caption = 'Options'
+      ClientHeight = 19
+      ClientWidth = 217
+      TabOrder = 0
+      object chkListed: TCheckBox
+        Left = 0
+        Height = 19
+        Top = 0
+        Width = 51
+        Align = alLeft
+        Caption = '&Listed'
+        Checked = True
+        OnChange = DoUpdateToDos
+        State = cbChecked
+        TabOrder = 0
+      end
+      object chkUsed: TCheckBox
+        Left = 51
+        Height = 19
+        Top = 0
+        Width = 46
+        Align = alLeft
+        Caption = '&Used'
+        Checked = True
+        OnChange = DoUpdateToDos
+        State = cbChecked
+        TabOrder = 1
+      end
+      object chkSourceEditor: TCheckBox
+        Left = 97
+        Height = 19
+        Top = 0
+        Width = 51
+        Align = alLeft
+        Caption = 'Editor'
+        Checked = True
+        OnChange = DoUpdateToDos
+        State = cbChecked
+        TabOrder = 2
+      end
+      object chkPackages: TCheckBox
+        Left = 148
+        Height = 19
+        Top = 0
+        Width = 69
+        Align = alLeft
+        Caption = '&Packages'
+        OnChange = DoUpdateToDos
+        TabOrder = 3
+      end
+    end
+    object tbHelp: TToolButton
+      Left = 483
+      Top = 2
+      Action = acHelp
+    end
+    object pnlShowWhat: TPanel
+      Left = 147
+      Height = 46
+      Top = 2
+      Width = 115
+      BevelOuter = bvNone
+      ClientHeight = 46
+      ClientWidth = 115
+      TabOrder = 1
+      object lblShowWhat: TLabel
+        Left = 0
+        Height = 15
+        Top = 3
+        Width = 29
+        Caption = 'Show'
+        ParentColor = False
+      end
+      object cboShowWhat: TComboBox
+        AnchorSideLeft.Control = pnlShowWhat
+        AnchorSideTop.Control = lblShowWhat
+        AnchorSideTop.Side = asrBottom
+        Left = 4
+        Height = 23
+        Top = 22
+        Width = 106
+        BorderSpacing.Around = 4
+        ItemHeight = 15
+        ItemIndex = 0
+        Items.Strings = (
+          'All'
+          'ToDo Only'
+          'Done Only'
+          'Notes Only'
+          'ToDo and Done'
+          'ToDo and Notes'
+          'Done and Notes'
+        )
+        OnChange = DoUpdateToDos
+        TabOrder = 0
+        Text = 'All'
+      end
+    end
+  end
+  object ActionList: TActionList
+    Left = 648
+    Top = 10
+    object acGoto: TAction
+      Caption = 'Goto'
+      OnExecute = acGotoExecute
+    end
+    object acRefresh: TAction
+      Caption = 'Refresh'
+      OnExecute = DoUpdateToDos
+    end
+    object acExport: TAction
+      Caption = 'Export'
+      OnExecute = acExportExecute
+    end
+    object acHelp: TAction
+      Caption = 'acHelp'
+      OnExecute = acHelpExecute
+    end
+  end
+  object SaveDialog: TSaveDialog
+    OnShow = SaveDialogShow
+    DefaultExt = '.csv'
+    Filter = 'csv|*.csv'
+    Options = [ofCreatePrompt, ofEnableSizing, ofViewDetail]
+    Left = 584
+    Top = 11
+  end
+  object XMLPropStorage: TXMLPropStorage
+    StoredValues = <>
+    Active = False
+    OnRestoringProperties = XMLPropStorageRestoringProperties
+    OnRestoreProperties = XMLPropStorageRestoreProperties
+    Left = 544
+    Top = 11
+  end
+end

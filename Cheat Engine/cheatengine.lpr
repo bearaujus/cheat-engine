@@ -306,6 +306,7 @@ begin
 
   overridefont:=nil;
   noautorun:=false;
+  skipFirstTimeUser:=false;
 
   getcedir;
   doTranslation;
@@ -387,6 +388,9 @@ begin
 
     if uppercase(ParamStr(i))='NOAUTORUN' then  //don't load any extentions yet
       noautorun:=true;
+
+    if uppercase(ParamStr(i))='NOFIRSTTIME' then
+      skipFirstTimeUser:=true;
   end;
 
 
@@ -418,4 +422,3 @@ begin
 
   Application.Run;
 end.
-

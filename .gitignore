@@ -62,4 +62,10 @@ Cheat Engine/MonoDataCollector/MonoDataCollector/x64/Release/MonoData.941726A9.t
 *.vcxproj
 *.vsidx
 *.lpi
+!tools/
+!tools/lazarus/
+!tools/lazarus/**/
+!tools/lazarus/**/*.lpi
+!tools/lazarus/**/*.o
+!tools/lazarus/**/*.ppu
 Cheat Engine/MonoDataCollector/MonoDataCollector/MonoDataCollector.vcxproj
