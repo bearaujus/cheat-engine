@@ -112,12 +112,12 @@ function Invoke-LazBuild([string]$ResolvedLazBuild) {
     $projectBytes = [System.IO.File]::ReadAllBytes($projectFile)
     $projectText = [System.Text.Encoding]::UTF8.GetString($projectBytes)
     $buildModePattern = '(?s)(<Item\d+ Name="' + [regex]::Escape($BuildMode) + '".*?<OptimizationLevel Value=")3(".*?</Item\d+>)'
-    $buildProjectText = [regex]::Replace($projectText, $buildModePattern, '${1}2${2}', 1)
+    $buildProjectText = [regex]::Replace($projectText, $buildModePattern, '${1}0${2}', 1)
     Write-Host "Building $Architecture with mode '$BuildMode'..."
     try {
         if ($buildProjectText -ne $projectText) {
             [System.IO.File]::WriteAllText($projectFile, $buildProjectText, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "Using optimization level 2 for FPC 3.2.2 compatibility."
+            Write-Host "Using optimization level 0 for FPC 3.2.2 compatibility."
         }
 
         & $ResolvedLazBuild $projectFile "--build-mode=$BuildMode"
@@ -152,7 +152,7 @@ switch ($Action) {
         }
 
         Write-Host "Running $executable"
-        $process = Start-Process -FilePath $executable -WorkingDirectory $binDir -PassThru
+        $process = Start-Process -FilePath $executable -WorkingDirectory $binDir -ArgumentList @('NOAUTORUN', 'NOFIRSTTIME') -PassThru
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) {
             throw "The application exited with code $($process.ExitCode)."
