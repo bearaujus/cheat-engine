@@ -333,6 +333,7 @@ type
     miOnlyShowCurrentCompareToColumn: TMenuItem;
     miLoadRecent: TMenuItem;
     miAlwaysHideChildren: TMenuItem;
+    miAlwaysExpandChildren: TMenuItem;
     miFoundListPreferences: TMenuItem;
     N2: TMenuItem;
     mfImageList: TImageList;
@@ -613,6 +614,7 @@ type
     procedure miChangeValueBackClick(Sender: TObject);
     procedure miDBVMFindWhatWritesOrAccessesClick(Sender: TObject);
     procedure miAlwaysHideChildrenClick(Sender: TObject);
+    procedure miAlwaysExpandChildrenClick(Sender: TObject);
     procedure miNetworkClick(Sender: TObject);
     procedure miNetworkReadUseProcMemClick(Sender: TObject);
     procedure miOnlyShowCurrentCompareToColumnClick(Sender: TObject);
@@ -5917,7 +5919,7 @@ begin
 
     {$ifdef windows}
     if wikiurl='' then //no wikilink given
-      HtmlHelpA(Win32WidgetSet.AppHandle, PChar(cheatenginedir + 'cheatengine.chm'), HH_HELP_CONTEXT, Data)
+      HtmlHelpA(Handle, PChar(cheatenginedir + 'cheatengine.chm'), HH_HELP_CONTEXT, Data)
     else
     {$endif}
       ShellExecute(0,'open',pchar(wikipath+wikiurl),nil,nil,SW_SHOW);
@@ -6003,7 +6005,7 @@ begin
 
   {$if defined(CPU386) or defined(CPUX86_64)}
   Set8087CW($133f);
-  SetSSECSR($1f80);
+  SetMXCSR($1f80);
   {$endif}
 
   //FormDropFiles fix for win7, win8 and later (window message filter update)
@@ -6274,7 +6276,7 @@ begin
   {$if defined(CPU386) or defined(CPUX86_64)}
   old8087CW := Get8087CW;
   Set8087CW($133f);
-  SetSSECSR($1f80);
+  SetMXCSR($1f80);
   {$endif}
 
 
@@ -7504,6 +7506,7 @@ begin
     miAllowCollapse.checked := moAllowManualCollapseAndExpand in selectedrecord.options;
     miManualExpandCollapse.checked := moManualExpandCollapse in selectedrecord.options;
     miAlwaysHideChildren.checked := moAlwaysHideChildren in selectedrecord.options;
+    miAlwaysExpandChildren.checked := moAlwaysExpandChildren in selectedrecord.options;
   end
   else
     miGroupconfig.Visible := False;
@@ -8032,6 +8035,19 @@ begin
   end;
 end;
 
+procedure TMainForm.miAlwaysExpandChildrenClick(Sender: TObject);
+begin
+  miAlwaysExpandChildren.Checked := not miAlwaysExpandChildren.Checked;
+
+  if addresslist.selectedRecord <> nil then
+  begin
+    if miAlwaysExpandChildren.Checked then
+      addresslist.selectedRecord.options := addresslist.selectedRecord.options + [moAlwaysExpandChildren]
+    else
+      addresslist.selectedRecord.options := addresslist.selectedRecord.options - [moAlwaysExpandChildren];
+  end;
+end;
+
 procedure TMainForm.miNetworkClick(Sender: TObject);
 begin
   updateNetworkOptions;
@@ -8476,7 +8492,7 @@ begin
   onetimeonly := True;
   {$if defined(CPU386) or defined(CPUX86_64)}
   Set8087CW($133f);
-  SetSSECSR($1f80);
+  SetMXCSR($1f80);
   {$endif}
 
   loadt := False;
@@ -8907,7 +8923,9 @@ begin
     if foundlist3.clientWidth<i then
       width:=width+(i-foundlist3.clientWidth);
 
-    i:=panel5.Height+splitter1.height+addresslist.headers.Height+btnNewScan.Height*4;
+    i:=panel5.Height+splitter1.height+addresslist.headers.Height+
+      addresslist.TableCommandBar.Height+addresslist.TableContextBar.Height+
+      btnNewScan.Height*4;
     if clientheight<i then
       clientheight:=i;
 
@@ -11557,11 +11575,9 @@ begin
 end;
 
 initialization
-  DecimalSeparator := '.';
-  ThousandSeparator := ',';
+  DefaultFormatSettings.DecimalSeparator := '.';
+  DefaultFormatSettings.ThousandSeparator := ',';
 
   {$i MainUnit.lrs}
 
 end.
-
-open

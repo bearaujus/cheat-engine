@@ -2010,6 +2010,10 @@ object MainForm: TMainForm
         Caption = 'Always hide children'
         OnClick = miAlwaysHideChildrenClick
       end
+      object miAlwaysExpandChildren: TMenuItem
+        Caption = 'Always expand children'
+        OnClick = miAlwaysExpandChildrenClick
+      end
     end
     object Plugins1: TMenuItem
       Caption = 'Plugins'

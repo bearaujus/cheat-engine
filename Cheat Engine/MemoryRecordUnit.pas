@@ -46,7 +46,7 @@ type
   TMemrecHotkeyAction=(mrhToggleActivation=0, mrhToggleActivationAllowIncrease=1, mrhToggleActivationAllowDecrease=2, mrhActivate=3, mrhDeactivate=4, mrhSetValue=5, mrhIncreaseValue=6, mrhDecreaseValue=7);
   TFreezeType=(ftFrozen, ftAllowIncrease, ftAllowDecrease);
 
-  TMemrecOption=(moHideChildren, moActivateChildrenAsWell, moDeactivateChildrenAsWell, moRecursiveSetValue, moAllowManualCollapseAndExpand, moManualExpandCollapse, moAlwaysHideChildren);
+  TMemrecOption=(moHideChildren, moActivateChildrenAsWell, moDeactivateChildrenAsWell, moRecursiveSetValue, moAllowManualCollapseAndExpand, moManualExpandCollapse, moAlwaysHideChildren, moAlwaysExpandChildren);
   TMemrecOptions=set of TMemrecOption;
 
 
@@ -1204,12 +1204,23 @@ end;
 
 procedure TMemoryRecord.SetVisibleChildrenState;
 {Called when options change and when children are assigned}
+var i: integer;
 begin
   {$IFNDEF jni}
-  if ((not factive) and (moHideChildren in foptions)) or (moAlwaysHideChildren in fOptions) then
+  if moAlwaysExpandChildren in fOptions then
+    treenode.Expand(true)
+  else if ((not factive) and (moHideChildren in foptions)) or (moAlwaysHideChildren in fOptions) then
     treenode.Collapse(true)
   else
+  begin
     treenode.Expand(false);
+
+    {A parent with moHideChildren collapses the complete subtree. Restore
+     required editor sections after that parent activates successfully.}
+    for i:=0 to treenode.Count-1 do
+      if moAlwaysExpandChildren in TMemoryRecord(treenode[i].Data).Options then
+        TMemoryRecord(treenode[i].Data).SetVisibleChildrenState;
+  end;
   {$ENDIF}
 end;
 
@@ -1223,6 +1234,15 @@ begin
 
   if (moAlwaysHideChildren in options) and (moHideChildren in newOptions) then
     newoptions:=newoptions-[moAlwaysHideChildren];
+
+  if (moAlwaysExpandChildren in newOptions) and
+     (not (moAlwaysExpandChildren in oldoptions)) then
+    newOptions:=newOptions-[moHideChildren, moAlwaysHideChildren]
+  else
+  if ((moHideChildren in newOptions) and (not (moHideChildren in oldoptions))) or
+     ((moAlwaysHideChildren in newOptions) and
+      (not (moAlwaysHideChildren in oldoptions))) then
+    newOptions:=newOptions-[moAlwaysExpandChildren];
 
   foptions:=newOptions;
 
@@ -1362,6 +1382,10 @@ begin
       a:=tempnode.Attributes.GetNamedItem('moAlwaysHideChildren');
       if (a<>nil) and (a.TextContent='1') then
           foptions:=foptions+[moAlwaysHideChildren];
+
+      a:=tempnode.Attributes.GetNamedItem('moAlwaysExpandChildren');
+      if (a<>nil) and (a.TextContent='1') then
+          foptions:=foptions+[moAlwaysExpandChildren];
     end;
   end;
 
@@ -1868,6 +1892,13 @@ begin
     if moAlwaysHideChildren in options then
     begin
       a:=doc.CreateAttribute('moAlwaysHideChildren');
+      a.TextContent:='1';
+      opt.Attributes.SetNamedItem(a);
+    end;
+
+    if moAlwaysExpandChildren in options then
+    begin
+      a:=doc.CreateAttribute('moAlwaysExpandChildren');
       a.TextContent:='1';
       opt.Attributes.SetNamedItem(a);
     end;
@@ -2651,6 +2682,15 @@ begin
       if (state=true) and (autoassemblerdata.disableinfo<>nil) then
         freeandnil(autoassemblerdata.disableinfo);
 
+      if state then
+      begin
+        {A failed script remains inactive and may be retried immediately. Clear
+         the previous failure while the new attempt is running so the UI does
+         not keep presenting a stale error as the current result.}
+        autoassemblerdata.lastExecutionFailed:=false;
+        autoassemblerdata.lastExecutionFailedReason:='';
+      end;
+
       if autoassemblerdata.disableinfo=nil then
         autoassemblerdata.disableinfo:=TDisableInfo.create;
 
@@ -2741,9 +2781,14 @@ end;
 procedure TMemoryRecord.setVisible(state: boolean);
 begin
   fVisible:=state;
+  if not state then
+    isSelected:=false;
   {$IFNDEF jni}
   if treenode<>nil then
+  begin
+    treenode.Visible:=state;
     treenode.update;
+  end;
   {$ENDIF}
 end;
 
@@ -3107,7 +3152,7 @@ begin
               result:=FloatToStr(fcustomtype.ConvertDataToFloat(buf, RealAddress))
           end
           else
-            if showashex         then result:=inttohex(fcustomtype.ConvertDataToInteger(buf, RealAddress),8) 
+            if showashex         then result:=inttohex(fcustomtype.ConvertDataToInteger(buf, RealAddress),8)
             else if showassigned then result:=inttostr(integer(fcustomtype.ConvertDataToInteger(buf, RealAddress)))
             else                      result:=inttostr(dword(fcustomtype.ConvertDataToInteger(buf, RealAddress)));
         end
@@ -3779,4 +3824,3 @@ begin
 end;
 
 end.
-

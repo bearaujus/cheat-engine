@@ -9,7 +9,7 @@ unit addresslist;
 interface
 
 uses
-  LCLIntf, LCLType, Classes, SysUtils, controls, stdctrls, comctrls, ExtCtrls, graphics,
+  LCLIntf, LCLType, Classes, SysUtils, Forms, controls, stdctrls, comctrls, ExtCtrls, graphics,
   math, MemoryRecordUnit, FPCanvas, CEFuncProc, NewKernelHandler, menus,dom,
   XMLRead,XMLWrite, symbolhandler, AddresslistEditor, inputboxtopunit,
   frmMemrecComboboxUnit, commonTypeDefs, multilineinputqueryunit, LazUTF8, StringHashList, betterControls;
@@ -23,9 +23,25 @@ type
   end;
 
 type
+  TAddressListHeaderControl=class(THeaderControl)
+  published
+    property OnDblClick;
+  end;
+
   TDropByListviewEvent=procedure(sender: TObject; node: TTreenode; attachmode: TNodeAttachMode) of object;
   TCompareRoutine=function(a: tmemoryrecord; b: tmemoryrecord): integer of object;
   TMemRecChangeEvent=function(sender: TObject; memrec: TMemoryRecord):boolean of object;
+
+  TAddressListNodeViewState=record
+    Node: TTreeNode;
+    Visible: boolean;
+    Expanded: boolean;
+    Selected: boolean;
+    MemoryRecordSelected: boolean;
+    MemoryRecordVisible: boolean;
+  end;
+
+  TAddressListNodeViewStates=array of TAddressListNodeViewState;
 
 
 
@@ -34,6 +50,22 @@ type
     lastSelected: integer;
 
     header: THeaderControl;
+    commandBar: TPanel;
+    searchEdit: TEdit;
+    searchTimer: TTimer;
+    searchStatus: TLabel;
+    contextBar: TPanel;
+    contextLabel: TLabel;
+    btnClearSearch: TButton;
+    btnExpandAll: TButton;
+    btnCollapseAll: TButton;
+    btnAddRecord: TButton;
+    btnMore: TButton;
+    commandPopup: TPopupMenu;
+    miCommandCreateHeader: TMenuItem;
+    miCommandShowAddress: TMenuItem;
+    miCommandShowType: TMenuItem;
+    miCommandResetColumns: TMenuItem;
     headerpopup: TPopupMenu;
     miSortOnClick: TMenuItem;
     Treeview: TTreeviewWithScroll; //TTreeview;//WithScroll;
@@ -48,6 +80,8 @@ type
     addresssortdirection: boolean;
     valuetypesortdirection: boolean;
     valuesortdirection: boolean;
+    sortedColumn: integer;
+    sortAscending: boolean;
 
     AddressListEditor: TAddressListEditor;
 
@@ -69,12 +103,50 @@ type
 
     animationtimer: TTimer;
     expandsignsize: integer;
+    hoverNode: TTreeNode;
+
+    filterActive: boolean;
+    filterUpdating: boolean;
+    filterStates: TAddressListNodeViewStates;
+    filterTopNode: TTreeNode;
 
     sortlevel0only: boolean;
 
     descriptionhashlist: TStringhashList;
 
     procedure doAnimation(sender: TObject);
+    function Scaled(Value: integer): integer;
+    function IsStructuralHeader(memrec: TMemoryRecord): boolean;
+    function MemoryRecordPath(memrec: TMemoryRecord): string;
+    procedure UpdateContextStatus;
+    function MemoryRecordTypeText(memrec: TMemoryRecord): string;
+    function MemoryRecordMatchesFilter(memrec: TMemoryRecord;
+      const Query: string): boolean;
+    function NodeIsInTree(Node: TTreeNode): boolean;
+    function BaselineNodeVisible(Node: TTreeNode): boolean;
+    function FindFilterState(Node: TTreeNode): integer;
+    procedure CaptureFilterState;
+    procedure RestoreFilterState;
+    procedure ApplyFilter;
+    procedure ClearFilter;
+    procedure PrepareForStructureChange;
+    procedure SearchEditChange(Sender: TObject);
+    procedure SearchTimerTimer(Sender: TObject);
+    procedure SearchEditKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure ClearSearchClick(Sender: TObject);
+    procedure CommandBarResize(Sender: TObject);
+    procedure ExpandAllClick(Sender: TObject);
+    procedure CollapseAllClick(Sender: TObject);
+    procedure AddRecordClick(Sender: TObject);
+    procedure MoreClick(Sender: TObject);
+    procedure CreateHeaderClick(Sender: TObject);
+    procedure ToggleAddressColumnClick(Sender: TObject);
+    procedure ToggleTypeColumnClick(Sender: TObject);
+    procedure ResetColumnsClick(Sender: TObject);
+    procedure SetColumnVisibility(AddressVisible, TypeVisible: boolean;
+      Save: boolean);
+    procedure AutoFitColumn(ColumnIndex: integer);
 
     function getTreeNodes: TTreenodes;
     procedure setTreeNodes(t: TTreenodes);
@@ -86,6 +158,7 @@ type
     procedure SelectionUpdate(sender: TObject);
     procedure sectiontrack(HeaderControl: TCustomHeaderControl; Section: THeaderSection; Width: Integer; State: TSectionTrackState);
     procedure sectionClick(HeaderControl: TCustomHeaderControl; Section: THeaderSection);
+    procedure HeaderDblClick(Sender: TObject);
     procedure FocusChange(sender: TObject);
     procedure TVDragOver(Sender, Source: TObject; X,Y: Integer; State: TDragState; var Accept: Boolean);
     procedure TVDragDrop(Sender, Source: TObject; X,Y: Integer);
@@ -94,8 +167,9 @@ type
     procedure TreeviewOnExpand(Sender: TObject; Node: TTreeNode; var AllowExpansion: Boolean);
     procedure TreeviewDblClick(Sender: TObject);
     procedure TreeviewMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-
-   // procedure TreeviewKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure TreeviewMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure TreeviewMouseLeave(Sender: TObject);
+    procedure TreeviewKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 
     procedure EditorDoubleclick(sender: tobject); //callback
     procedure MultiEdit(memrec: Tmemoryrecord);
@@ -189,6 +263,8 @@ type
 
 
     property headers: THeaderControl read header;
+    property TableCommandBar: TPanel read commandBar;
+    property TableContextBar: TPanel read contextBar;
   published
     property LoadedTableVersion: integer read getLoadedTableVersion;
 
@@ -241,6 +317,20 @@ resourcestring
   rsALNoDescription = 'No description';
   rsALAutoAssembleScritp = 'Auto Assemble script';
   rsSortOnClick = 'Sort on click';
+  rsSearchRecords = 'Search table records';
+  rsNoSearchMatches = 'No matches';
+  rsOneSearchMatch = '1 match';
+  rsSearchMatches = '%d matches';
+  rsClearSearch = 'Clear search';
+  rsExpandAll = 'Expand all';
+  rsCollapseAll = 'Collapse all';
+  rsAddRecord = 'Add record';
+  rsMoreTableCommands = 'More table commands';
+  rsCreateHeader = 'Create header';
+  rsShowAddressColumn = 'Show Address column';
+  rsShowTypeColumn = 'Show Type column';
+  rsResetColumnLayout = 'Reset column layout';
+  rsUnreadableAddress = 'This address is not currently readable';
 
 var
   ForbiddenSearchDescriptions: TStringHashList;
@@ -261,6 +351,737 @@ begin
   inherited MouseDown(button, shift, x,y);
 end;
 
+function TAddresslist.Scaled(Value: integer): integer;
+begin
+  Result:=max(1, round(Value*Screen.PixelsPerInch/96));
+end;
+
+function TAddresslist.IsStructuralHeader(memrec: TMemoryRecord): boolean;
+begin
+  Result:=(memrec<>nil) and memrec.isGroupHeader and
+    (moAlwaysExpandChildren in memrec.Options) and
+    (not (moActivateChildrenAsWell in memrec.Options)) and
+    (not (moDeactivateChildrenAsWell in memrec.Options));
+end;
+
+function TAddresslist.MemoryRecordPath(memrec: TMemoryRecord): string;
+var
+  Node: TTreeNode;
+  Current: TMemoryRecord;
+  Part: string;
+begin
+  Result:='';
+  if memrec=nil then exit;
+
+  Node:=memrec.TreeNode;
+  while Node<>nil do
+  begin
+    Current:=TMemoryRecord(Node.Data);
+    if (Current<>nil) and ((Node.Parent<>nil) or (Result='')) then
+    begin
+      Part:=Trim(Current.Description);
+      if Current.isGroupHeader and (Length(Part)>=2) and
+        (Part[1]='[') and (Part[Length(Part)]=']') then
+        Part:=Trim(Copy(Part,2,Length(Part)-2));
+
+      if Part<>'' then
+      begin
+        if Result='' then
+          Result:=Part
+        else
+          Result:=Part+'  >  '+Result;
+      end;
+    end;
+    Node:=Node.Parent;
+  end;
+end;
+
+procedure TAddresslist.UpdateContextStatus;
+var
+  MR: TMemoryRecord;
+begin
+  if (contextBar=nil) or (contextLabel=nil) then exit;
+
+  MR:=nil;
+  if Treeview.Selected<>nil then
+    MR:=TMemoryRecord(Treeview.Selected.Data);
+
+  contextLabel.Caption:=MemoryRecordPath(MR);
+  contextLabel.Hint:=contextLabel.Caption;
+  contextBar.Visible:=contextLabel.Caption<>'';
+end;
+
+function TAddresslist.MemoryRecordTypeText(memrec: TMemoryRecord): string;
+begin
+  case memrec.VarType of
+    vtCustom: Result:=memrec.CustomTypeName;
+    vtString:
+    begin
+      if not (memrec.Extra.stringData.unicode or memrec.Extra.stringData.codepage) then
+        Result:=VariableTypeToTranslatedString(memrec.VarType)+'['+
+          inttostr(memrec.Extra.stringData.length)+']'
+      else if memrec.Extra.stringData.unicode then
+        Result:=VariableTypeToTranslatedString(vtUnicodeString)+'['+
+          inttostr(memrec.Extra.stringData.length)+']'
+      else
+        Result:=VariableTypeToTranslatedString(vtCodePageString)+'['+
+          inttostr(memrec.Extra.stringData.length)+']';
+    end;
+    vtBinary:
+    begin
+      if memrec.Extra.bitData.bitlength=0 then
+        Result:=VariableTypeToTranslatedString(memrec.VarType)+':'+
+          inttostr(memrec.Extra.bitData.Bit)
+      else
+        Result:=VariableTypeToTranslatedString(memrec.VarType)+':'+
+          inttostr(memrec.Extra.bitData.Bit)+'->'+
+          inttostr(memrec.Extra.bitData.Bit+memrec.Extra.bitData.bitlength-1);
+    end;
+    else Result:=VariableTypeToTranslatedString(memrec.VarType);
+  end;
+end;
+
+function TAddresslist.MemoryRecordMatchesFilter(memrec: TMemoryRecord;
+  const Query: string): boolean;
+var
+  Haystack, Needle: string;
+begin
+  Needle:=UTF8UpperCase(Trim(Query));
+  if Needle='' then exit(true);
+
+  Haystack:=memrec.Description;
+  try
+    Haystack:=Haystack+#10+memrec.AddressString;
+  except
+    { A custom address callback must not break the search UI. }
+  end;
+  try
+    Haystack:=Haystack+#10+MemoryRecordTypeText(memrec);
+  except
+  end;
+  try
+    Haystack:=Haystack+#10+memrec.DisplayValue;
+  except
+    { Display callbacks may depend on a process that is no longer open. }
+  end;
+  Result:=pos(Needle, UTF8UpperCase(Haystack))>0;
+end;
+
+function TAddresslist.NodeIsInTree(Node: TTreeNode): boolean;
+var
+  I: integer;
+begin
+  Result:=false;
+  if Node=nil then exit;
+  for I:=0 to Treeview.Items.Count-1 do
+    if Treeview.Items[I]=Node then
+      exit(true);
+end;
+
+function TAddresslist.FindFilterState(Node: TTreeNode): integer;
+var
+  I: integer;
+begin
+  Result:=-1;
+  if Node=nil then exit;
+
+  I:=Node.AbsoluteIndex;
+  if (I>=0) and (I<length(filterStates)) and (filterStates[I].Node=Node) then
+    exit(I);
+
+  for I:=0 to high(filterStates) do
+    if filterStates[I].Node=Node then
+      exit(I);
+end;
+
+function TAddresslist.BaselineNodeVisible(Node: TTreeNode): boolean;
+var
+  StateIndex: integer;
+  MR: TMemoryRecord;
+begin
+  Result:=false;
+  if Node=nil then exit;
+
+  StateIndex:=FindFilterState(Node);
+  if StateIndex=-1 then
+    exit(Node.Visible);
+
+  MR:=TMemoryRecord(Node.Data);
+  if (MR<>nil) and
+    (MR.Visible<>filterStates[StateIndex].MemoryRecordVisible) then
+    Result:=MR.Visible
+  else
+    Result:=filterStates[StateIndex].Visible;
+end;
+
+procedure TAddresslist.CaptureFilterState;
+var
+  I: integer;
+  MR: TMemoryRecord;
+begin
+  setlength(filterStates, Treeview.Items.Count);
+  for I:=0 to Treeview.Items.Count-1 do
+  begin
+    filterStates[I].Node:=Treeview.Items[I];
+    filterStates[I].Visible:=Treeview.Items[I].Visible;
+    filterStates[I].Expanded:=Treeview.Items[I].Expanded;
+    filterStates[I].Selected:=Treeview.Items[I].Selected;
+    MR:=TMemoryRecord(Treeview.Items[I].Data);
+    filterStates[I].MemoryRecordSelected:=(MR<>nil) and MR.isSelected;
+    filterStates[I].MemoryRecordVisible:=(MR<>nil) and MR.Visible;
+  end;
+  filterTopNode:=Treeview.TopItem;
+  filterActive:=true;
+end;
+
+procedure TAddresslist.RestoreFilterState;
+var
+  I, StateIndex: integer;
+  MR: TMemoryRecord;
+  Node: TTreeNode;
+  OldOnExpanding: TTVExpandingEvent;
+  OldOnCollapsing: TTVCollapsingEvent;
+begin
+  if not filterActive then exit;
+  filterUpdating:=true;
+  OldOnExpanding:=Treeview.OnExpanding;
+  OldOnCollapsing:=Treeview.OnCollapsing;
+  Treeview.OnExpanding:=nil;
+  Treeview.OnCollapsing:=nil;
+  try
+    { Walk the live tree rather than dereferencing snapshot pointers.  A Lua
+      script may add or destroy a record while a search is active. }
+    for I:=0 to Treeview.Items.Count-1 do
+    begin
+      Node:=Treeview.Items[I];
+      StateIndex:=FindFilterState(Node);
+      if StateIndex<>-1 then
+      begin
+        MR:=TMemoryRecord(Node.Data);
+        if (MR<>nil) and
+          (MR.Visible<>filterStates[StateIndex].MemoryRecordVisible) then
+          Node.Visible:=MR.Visible
+        else
+          Node.Visible:=filterStates[StateIndex].Visible;
+      end;
+    end;
+
+    for I:=0 to Treeview.Items.Count-1 do
+    begin
+      Node:=Treeview.Items[I];
+      StateIndex:=FindFilterState(Node);
+      if StateIndex<>-1 then
+      begin
+        Node.Expanded:=filterStates[StateIndex].Expanded;
+        MR:=TMemoryRecord(Node.Data);
+        if MR<>nil then
+          MR.isSelected:=filterStates[StateIndex].MemoryRecordSelected and
+            Node.Visible;
+        Node.Selected:=filterStates[StateIndex].Selected and Node.Visible;
+      end;
+    end;
+
+    if filterTopNode<>nil then
+      for I:=0 to Treeview.Items.Count-1 do
+        if Treeview.Items[I]=filterTopNode then
+        begin
+          if filterTopNode.Visible then
+            Treeview.TopItem:=filterTopNode;
+          break;
+        end;
+  finally
+    Treeview.OnExpanding:=OldOnExpanding;
+    Treeview.OnCollapsing:=OldOnCollapsing;
+    filterUpdating:=false;
+    filterActive:=false;
+    filterTopNode:=nil;
+    setlength(filterStates, 0);
+  end;
+  Treeview.Refresh;
+end;
+
+procedure TAddresslist.ApplyFilter;
+var
+  Query: string;
+  DirectMatches, ShowNodes: array of boolean;
+  I, MatchCount, FirstMatch, StateIndex: integer;
+  Node, ParentNode: TTreeNode;
+  MR, ParentRecord: TMemoryRecord;
+  CanShow: boolean;
+  OldOnExpanding: TTVExpandingEvent;
+  OldOnCollapsing: TTVCollapsingEvent;
+
+  procedure MarkSubtree(Parent: TTreeNode);
+  var
+    Child: TTreeNode;
+    ChildIndex: integer;
+    ChildRecord: TMemoryRecord;
+  begin
+    Child:=Parent.GetFirstChild;
+    while Child<>nil do
+    begin
+      ChildIndex:=Child.AbsoluteIndex;
+      ChildRecord:=TMemoryRecord(Child.Data);
+      if (ChildIndex>=0) and (ChildIndex<length(ShowNodes)) and
+        BaselineNodeVisible(Child) and (ChildRecord<>nil) and
+        ChildRecord.Visible then
+      begin
+        ShowNodes[ChildIndex]:=true;
+        MarkSubtree(Child);
+      end;
+      Child:=Child.GetNextSibling;
+    end;
+  end;
+
+begin
+  if filterUpdating or (searchEdit=nil) then exit;
+  Query:=Trim(searchEdit.Text);
+  if Query='' then
+  begin
+    RestoreFilterState;
+    searchStatus.Caption:='';
+    UpdateContextStatus;
+    btnClearSearch.Visible:=false;
+    CommandBarResize(commandBar);
+    exit;
+  end;
+
+  if AddressListEditor<>nil then
+  begin
+    AddressListEditor.CloseEditor(false);
+    freeandnil(AddressListEditor);
+  end;
+
+  if not filterActive then CaptureFilterState;
+  setlength(DirectMatches, Treeview.Items.Count);
+  setlength(ShowNodes, Treeview.Items.Count);
+  MatchCount:=0;
+  FirstMatch:=-1;
+
+  for I:=0 to Treeview.Items.Count-1 do
+  begin
+    Node:=Treeview.Items[I];
+    MR:=TMemoryRecord(Node.Data);
+    DirectMatches[I]:=BaselineNodeVisible(Node) and (MR<>nil) and
+      MR.Visible and MemoryRecordMatchesFilter(MR, Query);
+    ShowNodes[I]:=DirectMatches[I];
+    if DirectMatches[I] then
+    begin
+      inc(MatchCount);
+      if FirstMatch=-1 then FirstMatch:=I;
+    end;
+  end;
+
+  for I:=0 to high(DirectMatches) do
+    if DirectMatches[I] then
+    begin
+      Node:=Treeview.Items[I];
+      ParentNode:=Node.Parent;
+      while ParentNode<>nil do
+      begin
+        ParentRecord:=TMemoryRecord(ParentNode.Data);
+        if BaselineNodeVisible(ParentNode) and (ParentRecord<>nil) and
+          ParentRecord.Visible then
+          ShowNodes[ParentNode.AbsoluteIndex]:=true;
+        ParentNode:=ParentNode.Parent;
+      end;
+
+      MR:=TMemoryRecord(Node.Data);
+      if (MR<>nil) and MR.isGroupHeader then
+        MarkSubtree(Node);
+    end;
+
+  filterUpdating:=true;
+  try
+    { Each query starts from the captured expansion state so searches do not
+      leave an ever-growing trail of expanded groups. }
+    OldOnExpanding:=Treeview.OnExpanding;
+    OldOnCollapsing:=Treeview.OnCollapsing;
+    Treeview.OnExpanding:=nil;
+    Treeview.OnCollapsing:=nil;
+    try
+      for I:=0 to Treeview.Items.Count-1 do
+      begin
+        StateIndex:=FindFilterState(Treeview.Items[I]);
+        if StateIndex<>-1 then
+          Treeview.Items[I].Expanded:=filterStates[StateIndex].Expanded;
+      end;
+    finally
+      Treeview.OnExpanding:=OldOnExpanding;
+      Treeview.OnCollapsing:=OldOnCollapsing;
+    end;
+
+    for I:=0 to Treeview.Items.Count-1 do
+    begin
+      MR:=TMemoryRecord(Treeview.Items[I].Data);
+      if MR<>nil then MR.isSelected:=false;
+      Treeview.Items[I].Visible:=ShowNodes[I];
+    end;
+
+    { Reveal every reachable match, while retaining the table's own rules for
+      protected groups such as moHideChildren. }
+    for I:=0 to high(DirectMatches) do
+      if DirectMatches[I] then
+      begin
+        Node:=Treeview.Items[I];
+        ParentNode:=Node.Parent;
+        while ParentNode<>nil do
+        begin
+          if ParentNode.Visible then ParentNode.Expanded:=true;
+          ParentNode:=ParentNode.Parent;
+        end;
+        MR:=TMemoryRecord(Node.Data);
+        if (MR<>nil) and MR.isGroupHeader and Node.Visible then
+          Node.Expanded:=true;
+      end;
+
+    FirstMatch:=-1;
+    for I:=0 to high(DirectMatches) do
+      if DirectMatches[I] then
+      begin
+        Node:=Treeview.Items[I];
+        CanShow:=Node.Visible;
+        ParentNode:=Node.Parent;
+        while CanShow and (ParentNode<>nil) do
+        begin
+          CanShow:=ParentNode.Visible and ParentNode.Expanded;
+          ParentNode:=ParentNode.Parent;
+        end;
+        if CanShow then
+        begin
+          FirstMatch:=I;
+          break;
+        end;
+      end;
+
+    if FirstMatch<>-1 then
+    begin
+      Node:=Treeview.Items[FirstMatch];
+      Treeview.Selected:=Node;
+      TMemoryRecord(Node.Data).isSelected:=true;
+    end;
+  finally
+    filterUpdating:=false;
+  end;
+
+  case MatchCount of
+    0: searchStatus.Caption:=rsNoSearchMatches;
+    1: searchStatus.Caption:=rsOneSearchMatch;
+    else searchStatus.Caption:=Format(rsSearchMatches, [MatchCount]);
+  end;
+  btnClearSearch.Visible:=true;
+  UpdateContextStatus;
+  CommandBarResize(commandBar);
+  Treeview.Refresh;
+end;
+
+procedure TAddresslist.ClearFilter;
+begin
+  if searchEdit=nil then exit;
+  if searchTimer<>nil then searchTimer.Enabled:=false;
+  filterUpdating:=true;
+  try
+    searchEdit.Text:='';
+  finally
+    filterUpdating:=false;
+  end;
+  RestoreFilterState;
+  searchStatus.Caption:='';
+  UpdateContextStatus;
+  btnClearSearch.Visible:=false;
+  CommandBarResize(commandBar);
+end;
+
+procedure TAddresslist.PrepareForStructureChange;
+var
+  SelectedRecords: array of TMemoryRecord;
+  FocusedRecord, MR: TMemoryRecord;
+  I, J, L: integer;
+begin
+  if hoverNode<>nil then
+  begin
+    if NodeIsInTree(hoverNode) then hoverNode.Update;
+    hoverNode:=nil;
+    Treeview.Hint:='';
+    Treeview.ShowHint:=false;
+  end;
+  if (not filterActive) and
+    ((searchEdit=nil) or (Trim(searchEdit.Text)='')) then exit;
+
+  setlength(SelectedRecords,0);
+  FocusedRecord:=nil;
+  if Treeview.Selected<>nil then
+    FocusedRecord:=TMemoryRecord(Treeview.Selected.Data);
+
+  for I:=0 to Count-1 do
+    if MemRecItems[I].isSelected then
+    begin
+      L:=length(SelectedRecords);
+      setlength(SelectedRecords,L+1);
+      SelectedRecords[L]:=MemRecItems[I];
+    end;
+
+  ClearFilter;
+
+  { Clearing a filter normally restores the selection that existed before the
+    search.  A structural command, however, must continue to act on what the
+    user selected in the filtered view. }
+  filterUpdating:=true;
+  try
+    Treeview.Selected:=nil;
+    for I:=0 to Count-1 do
+      MemRecItems[I].isSelected:=false;
+
+    for I:=0 to high(SelectedRecords) do
+      for J:=0 to Count-1 do
+      begin
+        MR:=MemRecItems[J];
+        if MR=SelectedRecords[I] then
+        begin
+          MR.isSelected:=MR.Visible and (MR.TreeNode<>nil) and
+            MR.TreeNode.Visible;
+          break;
+        end;
+      end;
+
+    if FocusedRecord<>nil then
+      for I:=0 to Count-1 do
+        if (MemRecItems[I]=FocusedRecord) and MemRecItems[I].isSelected then
+        begin
+          Treeview.Selected:=MemRecItems[I].TreeNode;
+          break;
+        end;
+
+    if (Treeview.Selected=nil) and (length(SelectedRecords)>0) then
+      for I:=0 to Count-1 do
+        if MemRecItems[I].isSelected then
+        begin
+          Treeview.Selected:=MemRecItems[I].TreeNode;
+          break;
+        end;
+  finally
+    filterUpdating:=false;
+  end;
+end;
+
+procedure TAddresslist.SearchEditChange(Sender: TObject);
+begin
+  if filterUpdating then exit;
+  searchTimer.Enabled:=false;
+  if Trim(searchEdit.Text)='' then
+    ApplyFilter
+  else
+    searchTimer.Enabled:=true;
+end;
+
+procedure TAddresslist.SearchTimerTimer(Sender: TObject);
+begin
+  searchTimer.Enabled:=false;
+  ApplyFilter;
+end;
+
+procedure TAddresslist.SearchEditKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key=VK_ESCAPE then
+  begin
+    ClearFilter;
+    Treeview.SetFocus;
+    Key:=0;
+  end
+  else if Key=VK_RETURN then
+  begin
+    searchTimer.Enabled:=false;
+    ApplyFilter;
+    Treeview.SetFocus;
+    Key:=0;
+  end;
+end;
+
+procedure TAddresslist.ClearSearchClick(Sender: TObject);
+begin
+  ClearFilter;
+  searchEdit.SetFocus;
+end;
+
+procedure TAddresslist.CommandBarResize(Sender: TObject);
+var
+  X, H, Y, StatusWidth: integer;
+begin
+  if btnMore=nil then exit;
+  btnAddRecord.Visible:=commandBar.ClientWidth>=Scaled(260);
+  btnExpandAll.Visible:=commandBar.ClientWidth>=Scaled(430);
+  btnCollapseAll.Visible:=btnExpandAll.Visible;
+  StatusWidth:=Scaled(82);
+  searchStatus.Visible:=(searchStatus.Caption<>'') and
+    (Trim(searchEdit.Text)<>'') and
+    (commandBar.ClientWidth>=Scaled(560));
+  btnClearSearch.Visible:=(searchEdit.Text<>'') and
+    (commandBar.ClientWidth>=Scaled(190));
+
+  H:=Scaled(26);
+  Y:=(commandBar.ClientHeight-H) div 2;
+  X:=commandBar.ClientWidth-Scaled(6);
+
+  btnMore.SetBounds(X-Scaled(34),Y,Scaled(34),H);
+  X:=btnMore.Left-Scaled(4);
+  if btnAddRecord.Visible then
+  begin
+    btnAddRecord.SetBounds(X-Scaled(76),Y,Scaled(76),H);
+    X:=btnAddRecord.Left-Scaled(4);
+  end;
+  if btnCollapseAll.Visible then
+  begin
+    btnCollapseAll.SetBounds(X-Scaled(82),Y,Scaled(82),H);
+    X:=btnCollapseAll.Left-Scaled(2);
+    btnExpandAll.SetBounds(X-Scaled(72),Y,Scaled(72),H);
+    X:=btnExpandAll.Left-Scaled(6);
+  end;
+  if searchStatus.Visible then
+  begin
+    searchStatus.SetBounds(X-StatusWidth,Y,StatusWidth,H);
+    X:=searchStatus.Left-Scaled(4);
+  end;
+  if btnClearSearch.Visible then
+  begin
+    btnClearSearch.SetBounds(X-Scaled(28),Y,Scaled(28),H);
+    X:=btnClearSearch.Left-Scaled(4);
+  end;
+
+  searchEdit.SetBounds(Scaled(8),Y,max(Scaled(48),X-Scaled(8)),H);
+end;
+
+procedure TAddresslist.ExpandAllClick(Sender: TObject);
+var
+  I: integer;
+begin
+  for I:=0 to Treeview.Items.Count-1 do
+    if (Treeview.Items[I].Parent=nil) and Treeview.Items[I].Visible then
+      Treeview.Items[I].Expand(true);
+end;
+
+procedure TAddresslist.CollapseAllClick(Sender: TObject);
+var
+  I: integer;
+  OldOnCollapsing: TTVCollapsingEvent;
+begin
+  if (AddressListEditor<>nil) and AddressListEditor.Visible then
+    AddressListEditor.CloseEditor(false);
+
+  OldOnCollapsing:=Treeview.OnCollapsing;
+  Treeview.OnCollapsing:=nil;
+  try
+    for I:=Treeview.Items.Count-1 downto 0 do
+      if Treeview.Items[I].Visible and Treeview.Items[I].HasChildren then
+        Treeview.Items[I].Collapse(false);
+  finally
+    Treeview.OnCollapsing:=OldOnCollapsing;
+  end;
+end;
+
+procedure TAddresslist.AddRecordClick(Sender: TObject);
+begin
+  PrepareForStructureChange;
+  addAddressManually('', vtDword, '', true);
+end;
+
+procedure TAddresslist.MoreClick(Sender: TObject);
+var
+  P: TPoint;
+begin
+  P:=btnMore.ClientToScreen(Point(0,btnMore.Height));
+  commandPopup.PopUp(P.X,P.Y);
+end;
+
+procedure TAddresslist.CreateHeaderClick(Sender: TObject);
+var
+  GroupName: string;
+begin
+  GroupName:=rsALNoDescription;
+  if InputQuery(rsCreateHeader, rsWhatWillBeTheNewDescription, GroupName) then
+  begin
+    PrepareForStructureChange;
+    CreateGroup(GroupName);
+  end;
+end;
+
+procedure TAddresslist.SetColumnVisibility(AddressVisible,
+  TypeVisible: boolean; Save: boolean);
+begin
+  header.Sections[2].Visible:=AddressVisible;
+  header.Sections[3].Visible:=TypeVisible;
+  miCommandShowAddress.Checked:=AddressVisible;
+  miCommandShowType.Checked:=TypeVisible;
+  if Save then
+  begin
+    cereg.writeBool('Addresslist: show address column', AddressVisible);
+    cereg.writeBool('Addresslist: show type column', TypeVisible);
+  end;
+  Treeview.Refresh;
+end;
+
+procedure TAddresslist.ToggleAddressColumnClick(Sender: TObject);
+begin
+  SetColumnVisibility(not header.Sections[2].Visible,
+    header.Sections[3].Visible, true);
+end;
+
+procedure TAddresslist.ToggleTypeColumnClick(Sender: TObject);
+begin
+  SetColumnVisibility(header.Sections[2].Visible,
+    not header.Sections[3].Visible, true);
+end;
+
+procedure TAddresslist.ResetColumnsClick(Sender: TObject);
+begin
+  header.Sections[0].Width:=Scaled(52);
+  header.Sections[1].Width:=Scaled(220);
+  header.Sections[2].Width:=Scaled(135);
+  header.Sections[3].Width:=Scaled(100);
+  header.Sections[4].Width:=9000000;
+  SetColumnVisibility(true,true,true);
+end;
+
+procedure TAddresslist.AutoFitColumn(ColumnIndex: integer);
+var
+  I, W: integer;
+  MR: TMemoryRecord;
+  S: string;
+begin
+  if (ColumnIndex<0) or (ColumnIndex>=header.Sections.Count) then exit;
+  W:=header.Canvas.TextWidth(header.Sections[ColumnIndex].Text)+Scaled(24);
+  for I:=0 to Count-1 do
+    if MemRecItems[I].TreeNode.Visible then
+    begin
+      MR:=MemRecItems[I];
+      case ColumnIndex of
+        1: S:=MR.Description;
+        2: S:=MR.AddressString;
+        3: S:=MemoryRecordTypeText(MR);
+        4: S:=MR.DisplayValue;
+        else S:='';
+      end;
+      W:=max(W, Treeview.Canvas.TextWidth(S)+Scaled(20)+
+        MR.TreeNode.Level*Scaled(14));
+    end;
+  W:=min(W,max(Scaled(80),Treeview.ClientWidth div 2));
+  header.Sections[ColumnIndex].Width:=W;
+end;
+
+procedure TAddresslist.HeaderDblClick(Sender: TObject);
+var
+  P: TPoint;
+  I: integer;
+begin
+  P:=header.ScreenToClient(Mouse.CursorPos);
+  for I:=0 to header.Sections.Count-2 do
+    if abs(P.X-header.Sections[I].Right)<=Scaled(5) then
+    begin
+      AutoFitColumn(I);
+      exit;
+    end;
+end;
+
 procedure TAddresslist.refresh;
 begin
   if treeview<>nil then
@@ -272,6 +1093,7 @@ var
   i: integer;
   item: TMemoryRecord;
 begin
+  PrepareForStructureChange;
   //first check if it's being edited/or busy
   if self=nil then exit;
 
@@ -404,7 +1226,8 @@ var
 begin
   //note, I should upgrade the memoryrecord class with this type instead of two booleans
   for i:=0 to count-1 do
-    if memrecitems[i].isSelected then
+    if memrecitems[i].isSelected and
+      (not IsStructuralHeader(memrecitems[i])) then
     begin
       memrecitems[i].allowIncrease:=FreezeType=ftAllowIncrease;
       memrecitems[i].allowDecrease:=FreezeType=ftAllowDecrease;
@@ -418,7 +1241,8 @@ begin
   i:=0;
   while i<count do
   begin
-    if memrecitems[i].isSelected then
+    if memrecitems[i].isSelected and
+      (not IsStructuralHeader(memrecitems[i])) then
       memrecitems[i].active:=false;    //this will also reset the allow* booleans
     i:=i+1
   end;
@@ -432,7 +1256,11 @@ procedure TAddresslist.SelectAll;
 var i: integer;
 begin
   for i:=0 to count-1 do
-    MemRecItems[i].isSelected:=true;
+    if filterActive then
+      MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible and
+        MemoryRecordMatchesFilter(MemRecItems[i],searchEdit.Text)
+    else
+      MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible;
 
   refresh;
 end;
@@ -442,25 +1270,26 @@ var i: integer;
 question: string;
 oldindex: integer;
 begin
-
   if count=0 then exit;
 
   if selcount=0 then exit;
   if selcount=1 then question:=rsDoYouWantToDeleteTheSelectedAddress else question:=rsDoYouWantToDeleteTheSelectedAddresses;
 
+  if ask and
+    (messagedlg(question, mtConfirmation, [mbyes, mbno], 0)<>mryes) then
+    exit;
+
+  PrepareForStructureChange;
+  if selectedRecord=nil then exit;
   oldindex:=selectedRecord.treenode.AbsoluteIndex;
 
-
-  if (not ask) or (messagedlg(question, mtConfirmation, [mbyes, mbno], 0) = mryes) then
+  i:=0;
+  while i<count do
   begin
-    i:=0;
-    while i<count do
-    begin
-      if MemRecItems[i].isSelected and (MemRecItems[i].isBeingEdited=false) and (MemRecItems[i].AsyncProcessing=false) then
-        MemRecItems[i].Free //Free also cleans up it's associated treenode, and all it's children
-      else
-        inc(i);
-    end;
+    if MemRecItems[i].isSelected and (MemRecItems[i].isBeingEdited=false) and (MemRecItems[i].AsyncProcessing=false) then
+      MemRecItems[i].Free //Free also cleans up it's associated treenode, and all it's children
+    else
+      inc(i);
   end;
 
   if oldindex>=treeview.items.count then
@@ -519,7 +1348,7 @@ var currentEntry: TDOMNode;
 memrec: TMemoryRecord;
 i: integer;
 begin
-
+  PrepareForStructureChange;
   currentEntry:=CheatEntries.FirstChild;
   while currententry<>nil do
   begin
@@ -604,7 +1433,7 @@ var CheatEntries, currentEntry: TDOMNode;
   addrnode: TDOMNode;
   s: string;
 begin
-  
+
   CheatEntries:=CheatTable.FindNode('CheatEntries');
   if cheatentries<>nil then
   begin
@@ -667,6 +1496,7 @@ var doc: TXMLDocument;
 
 
 begin
+  PrepareForStructureChange;
   doc:=nil;
   s:=nil;
   relativeaswell:=false;
@@ -773,7 +1603,7 @@ var
   memrec: TMemoryRecord;
   n: TTreenode;
 begin
-
+  PrepareForStructureChange;
   memrec:=TMemoryrecord.Create(self);
   memrec.id:=GetUniqueMemrecId;
   memrec.isGroupHeader:=true;
@@ -794,6 +1624,7 @@ procedure TAddresslist.addAutoAssembleScript(script: string);
 var
   memrec: TMemoryRecord;
 begin
+  PrepareForStructureChange;
   memrec:=TMemoryrecord.Create(self);
   memrec.id:=GetUniqueMemrecId;
   memrec.isGroupHeader:=false;
@@ -908,6 +1739,7 @@ var
   i: integer;
   t: TTreenode;
 begin
+  PrepareForStructureChange;
   memrec:=TMemoryRecord.create(self);
 
   memrec.id:=GetUniqueMemrecId;
@@ -1259,7 +2091,8 @@ begin
 
 
 
-  if (memrec.VarType<>vtAutoAssembler) and (selcount<=1) and (memrec.DropDownCount=0) then
+  if (memrec.VarType<>vtAutoAssembler) and (selcount<=1) and
+    (not memrec.isGroupHeader) then
   begin
 
 
@@ -1267,7 +2100,8 @@ begin
       freeandnil(AddressListEditor);
 
     AddressListEditor:=TAddresslisteditor.create(treeview, memrec, header.Sections[4].Left);
-    AddressListEditor.OnDblClick:=EditorDoubleclick;
+    if not AddressListEditor.DropDownActive then
+      AddressListEditor.OnDblClick:=EditorDoubleclick;
   end
   else
     valuedblclick(node);
@@ -1276,6 +2110,8 @@ end;
 procedure TAddresslist.TreeviewOnExpand(Sender: TObject; Node: TTreeNode; var AllowExpansion: Boolean);
 var r: TMemoryRecord;
 begin
+  if (AddressListEditor<>nil) and AddressListEditor.Visible then
+    AddressListEditor.CloseEditor(false);
   AllowExpansion:=true;
 
   r:=TMemoryRecord(node.data);
@@ -1286,6 +2122,8 @@ end;
 procedure TAddresslist.TreeviewOnCollapse(Sender: TObject; Node: TTreeNode; var AllowCollapse: Boolean);
 var r: TMemoryRecord;
 begin
+  if (AddressListEditor<>nil) and AddressListEditor.Visible then
+    AddressListEditor.CloseEditor(false);
   AllowCollapse:=false;
   r:=TMemoryRecord(node.data);
   if ((moHideChildren in r.options) and (not r.active)) or  (moManualExpandCollapse in r.options) or (moAllowManualCollapseAndExpand in r.options) or (moAlwaysHideChildren in r.options)  then //if not active then allow collapse, or if it's allowed to collapse
@@ -1332,7 +2170,7 @@ begin
             1: descriptiondblclick(node);
             2: addressdblclick(node);
             3: ; //typedblclick(node);
-            4: valuedblclick(node);
+            4: valueclick(node);
           end;
         end
         else
@@ -1354,7 +2192,7 @@ begin
             1: descriptiondblclick(node);
             2: addressdblclick(node);
             3: typedblclick(node);
-            4: valuedblclick(node);
+            4: valueclick(node);
           end;
         end;
 
@@ -1373,6 +2211,7 @@ var
   oldstate: boolean;
 
   mr: TMemoryRecord;
+  structuralHeader: boolean;
 
   n: ttreenode;
 
@@ -1387,12 +2226,20 @@ begin
   x:=p.x;
   y:=p.y;
 
+  if (AddressListEditor<>nil) and AddressListEditor.Visible then
+  begin
+    AddressListEditor.CloseEditor(true);
+    if AddressListEditor.Visible then exit;
+    freeandnil(AddressListEditor);
+  end;
+
   node:=treeview.GetNodeAt(x,y);
   if node<>nil then
   begin
     if button<>mbleft then exit;
 
     mr:=TMemoryRecord(node.data);
+    structuralHeader:=IsStructuralHeader(mr);
 
     textrect:=node.DisplayRect(true);
     linerect:=node.DisplayRect(false);
@@ -1428,7 +2275,7 @@ begin
     checkboxstart:=textrect.left+1;
 
     checkboxend:=checkboxstart+(linerect.bottom-linerect.top)-2;
-    if inrange(x, checkboxstart, checkboxend ) then
+    if (not structuralHeader) and inrange(x, checkboxstart, checkboxend ) then
     begin
       //checkbox click
       //oldstate:=TMemoryRecord(node.data).Active;
@@ -1444,7 +2291,7 @@ begin
 
     end;
 
-    if TMemoryRecord(node.data).Active then
+    if (not structuralHeader) and TMemoryRecord(node.data).Active then
     begin
       //arrow spot is clicked
       //nothing->increased->decreased->nothing->...
@@ -1461,21 +2308,15 @@ begin
 
 
 
-    //todo: Add setting to enable/disable this
-    {
-    if (button=mbLeft) and (inrange(x,header.Sections[4].Left,header.Sections[4].right)) then
+    if (button=mbLeft) and header.Sections[4].Visible and
+      (inrange(x,header.Sections[4].Left,
+        min(header.Sections[4].right,Treeview.ClientWidth))) and
+      (mr.DropDownCount>0) and (not mr.isGroupHeader) and
+      (mr.VarType<>vtAutoAssembler) then
     begin
-      //check if text of the value is clicked
-
-      if mr.IsReadableAddress then
-      begin
-        SelectionUpdate(Treeview);
-        if (x<header.Sections[4].Left+treeview.canvas.TextWidth(mr.DisplayValue)) and (SelCount<=1) then
-          valueclick(node); //initiate the value change routine
-
-      end;
+      SelectionUpdate(Treeview);
+      if SelCount<=1 then valueclick(node);
     end;
-    }
   end
   else
   begin
@@ -1490,12 +2331,95 @@ begin
   end;
 end;
 
-{
 procedure TAddresslist.TreeviewKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if key=VK_DELETE then
-    deleteSelected;
-end;   }
+  if (Key=ord('F')) and (ssCtrl in Shift) then
+  begin
+    searchEdit.SetFocus;
+    searchEdit.SelectAll;
+    Key:=0;
+  end
+  else if (Key=VK_ESCAPE) and filterActive then
+  begin
+    ClearFilter;
+    Key:=0;
+  end;
+end;
+
+procedure TAddresslist.TreeviewMouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+var
+  Node: TTreeNode;
+  MR: TMemoryRecord;
+  S: string;
+  ColumnIndex, AvailableWidth: integer;
+begin
+  Node:=Treeview.GetNodeAt(X,Y);
+  if Node<>hoverNode then
+  begin
+    if NodeIsInTree(hoverNode) then hoverNode.Update;
+    hoverNode:=Node;
+    if hoverNode<>nil then hoverNode.Update;
+  end;
+
+  Treeview.Hint:='';
+  Treeview.ShowHint:=false;
+  if Node=nil then exit;
+  MR:=TMemoryRecord(Node.Data);
+  if MR=nil then exit;
+
+  if (MR.VarType=vtAutoAssembler) and MR.LastAAExecutionFailed then
+    S:=MR.LastAAExecutionFailedReason
+  else if (not MR.isGroupHeader) and (MR.VarType<>vtAutoAssembler) and
+    (not MR.IsReadableAddress) then
+    S:=rsUnreadableAddress
+  else
+  begin
+    S:='';
+    ColumnIndex:=-1;
+    if inrange(X,header.Sections[1].Left,header.Sections[1].Right) then
+      ColumnIndex:=1
+    else if header.Sections[2].Visible and
+      inrange(X,header.Sections[2].Left,header.Sections[2].Right) then
+      ColumnIndex:=2
+    else if header.Sections[3].Visible and
+      inrange(X,header.Sections[3].Left,header.Sections[3].Right) then
+      ColumnIndex:=3
+    else if inrange(X,header.Sections[4].Left,
+      min(header.Sections[4].Right,Treeview.ClientWidth)) then
+      ColumnIndex:=4;
+
+    case ColumnIndex of
+      1: S:=MR.Description;
+      2: S:=MR.AddressString;
+      3: S:=MemoryRecordTypeText(MR);
+      4: S:=MR.DisplayValue;
+    end;
+
+    if ColumnIndex>=0 then
+    begin
+      AvailableWidth:=header.Sections[ColumnIndex].Width-Scaled(12);
+      if Treeview.Canvas.TextWidth(S)<=AvailableWidth then S:='';
+    end;
+  end;
+
+  if S<>'' then
+  begin
+    Treeview.Hint:=S;
+    Treeview.ShowHint:=true;
+  end;
+end;
+
+procedure TAddresslist.TreeviewMouseLeave(Sender: TObject);
+begin
+  if NodeIsInTree(hoverNode) then
+  begin
+    hoverNode.Update;
+  end;
+  hoverNode:=nil;
+  Treeview.Hint:='';
+  Treeview.ShowHint:=false;
+end;
 
 
 
@@ -1510,7 +2434,7 @@ var
 
   basenode: TMemoryrecord;
 begin
-
+  PrepareForStructureChange;
   treeview.BeginUpdate;
   try
     if firstnode.level>0 then
@@ -1716,9 +2640,14 @@ begin
 end;
 
 procedure TAddresslist.sectionClick(HeaderControl: TCustomHeaderControl; Section: THeaderSection);
+var
+  I: integer;
+  BaseText: string;
 begin
   if miSortOnClick.checked then
   begin
+    sortedColumn:=section.Index;
+
     //sort the addresslist based on the clicked section
     case section.Index of
       0: sortByActive;
@@ -1727,11 +2656,41 @@ begin
       3: sortByValueType;
       4: sortByValue;
     end;
+
+    { The legacy sort routines toggle their per-column direction after the
+      comparison has run.  At that point the stored flag describes the order
+      that was just applied, so use it for the header indicator. }
+    case section.Index of
+      0: sortAscending:=activesortdirection;
+      1: sortAscending:=descriptionsortdirection;
+      2: sortAscending:=addresssortdirection;
+      3: sortAscending:=valuetypesortdirection;
+      4: sortAscending:=valuesortdirection;
+    end;
+
+    for I:=0 to header.Sections.Count-1 do
+    begin
+      case I of
+        0: BaseText:=rsActive;
+        1: BaseText:=rsDescription;
+        2: BaseText:=rsAddress;
+        3: BaseText:=rsType;
+        else BaseText:=rsValue;
+      end;
+      if I=sortedColumn then
+      begin
+        if sortAscending then BaseText:=BaseText+' ^'
+        else BaseText:=BaseText+' v';
+      end;
+      header.Sections[I].Text:=BaseText;
+    end;
   end;
 end;
 
 procedure TAddresslist.sectiontrack(HeaderControl: TCustomHeaderControl; Section: THeaderSection; Width: Integer; State: TSectionTrackState);
 begin
+  if (AddressListEditor<>nil) and AddressListEditor.Visible then
+    AddressListEditor.UpdatePosition(header.Sections[4].Left);
   treeview.Refresh;
 end;
 
@@ -1775,6 +2734,9 @@ var
 
   selectednodelist: array of TTreenode;
 begin
+  { Resolve the destination before clearing a filter changes the row at Y. }
+  node:=TreeView.GetNodeAt(x,y);
+  PrepareForStructureChange;
   setlength(selectednodelist,0);
   for i:=0 to treeview.items.count-1 do
     if TMemoryRecord(treeview.items[i].data).isSelected then
@@ -1786,11 +2748,6 @@ begin
         selectednodelist[length(selectednodelist)-1]:=treeview.items[i];
       end;
     end;
-
-  node:=TreeView.GetNodeAt(x,y);
-
-
-
 
   if node<>nil then
   begin
@@ -1878,6 +2835,7 @@ var shift:TShiftState;
     i: integer;
    // firstnode, lastNode: TTreenode;
 begin
+  if filterUpdating then exit;
   //Because the multiselect of lazarus is horribly broken in the build I use, I've just implemented it myself
 
   shift:=GetKeyShiftState;
@@ -1899,7 +2857,8 @@ begin
       for i:=min(lastselected,treeview.selected.absoluteIndex) to max(lastselected,treeview.selected.absoluteIndex) do
       begin
         //check if any parent is not expanded, if so, isselected should be false
-        MemRecItems[i].isSelected:=not hasNonExpandedParent(memrecitems[i].treenode.parent);
+        MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible and
+          (not hasNonExpandedParent(memrecitems[i].treenode.parent));
       end;
     end
     else
@@ -1928,6 +2887,7 @@ begin
       end;
     end;
   end;
+  UpdateContextStatus;
 end;
 
 procedure TAddresslist.doAnimation(sender: TObject);
@@ -1941,17 +2901,10 @@ begin
   start:=0;
   stop:=treeview.Items.Count-1;
 
-   {
-
   if treeview.TopItem<>nil then
-    start:=treeview.TopItem.Index
-  else
-    start:=0;
-
+    start:=treeview.TopItem.AbsoluteIndex;
   if treeview.BottomItem<>nil then
-    stop:=treeview.BottomItem.Index
-  else
-    stop:=count-1; }
+    stop:=treeview.BottomItem.AbsoluteIndex;
 
   for i:=start to stop do
   begin
@@ -1998,6 +2951,11 @@ var
   tempstring: string;
 
   c: Tcolor;
+  valueRight, caretX, iconSize: integer;
+  textstyle: TTextStyle;
+  oldtextstyle: TTextStyle;
+  oldfontstyle: TFontStyles;
+  structuralHeader: boolean;
 begin
   //multiselect implementation
 
@@ -2017,7 +2975,15 @@ begin
     fulltextline.Left:=textrect.Left;
 
     memrec:=TMemoryRecord(Node.data);
+    structuralHeader:=IsStructuralHeader(memrec);
 
+    oldfontstyle:=sender.Canvas.Font.Style;
+    oldtextstyle:=sender.Canvas.TextStyle;
+    textstyle:=oldtextstyle;
+    textstyle.Layout:=tlCenter;
+    textstyle.SingleLine:=true;
+    textstyle.EndEllipsis:=true;
+    sender.Canvas.TextStyle:=textstyle;
 
     sender.Canvas.Brush.color:=sender.Color;
     fulltextline.left:=0;
@@ -2026,10 +2992,44 @@ begin
     //exit;
 
     if not memrec.visible then //don't render it
+    begin
+      sender.Canvas.TextStyle:=oldtextstyle;
+      sender.Canvas.Font.Style:=oldfontstyle;
+      sender.Canvas.Brush.Color:=oldbrushcolor;
       exit;
+    end;
+
+    if memrec.isGroupHeader then
+    begin
+      if ShouldAppsUseDarkMode then
+      begin
+        if structuralHeader then
+          sender.Canvas.Brush.Color:=incColor(sender.Color,16)
+        else
+          sender.Canvas.Brush.Color:=incColor(sender.Color,8);
+      end
+      else
+      begin
+        if structuralHeader then
+          sender.Canvas.Brush.Color:=RGBToColor(232,238,245)
+        else
+          sender.Canvas.Brush.Color:=RGBToColor(246,248,250);
+      end;
+      sender.Canvas.FillRect(fulltextline);
+      sender.Canvas.Font.Style:=sender.Canvas.Font.Style+[fsBold];
+    end;
+
+    if (node=hoverNode) and (not memrec.isSelected) then
+    begin
+      if ShouldAppsUseDarkMode then
+        sender.Canvas.Brush.Color:=incColor(sender.Color,12)
+      else
+        sender.Canvas.Brush.Color:=RGBToColor(241,245,249);
+      sender.Canvas.FillRect(fulltextline);
+    end;
 
 
-    bordersize:=1*trunc(fontmultiplication);
+    bordersize:=max(1,trunc(fontmultiplication));
 
     if expandsignsize=0 then
     begin
@@ -2062,7 +3062,7 @@ begin
     if memrec.isSelected then
     begin
       sender.canvas.pen.color:=clWindowtext;
-      sender.Canvas.Font.Color:=INVERTCOLOR(ColorToRGB(SelectedBackgroundColor));//  InvertColor(memrec.Color)
+      sender.Canvas.Font.Color:=Graphics.clHighlightText;
     end
     else
     begin
@@ -2086,31 +3086,22 @@ begin
 
     if moManualExpandCollapse in memrec.Options then
     begin
-      //draw the expand sign (+/-)  (taken and modified from treeview.inc)
       oldpencolor:=sender.canvas.pen.color;
       sender.canvas.pen.color:=expandSignColor;
-
-
-
-      expandsignlineborderspace:=expandsignsize div 4;
-
-      if expandsignsize mod 4>2 then //round up
-        inc(expandsignlineborderspace);
-
-
       expandsign:=Rect(textrect.left, textrect.top+((textrect.bottom-textrect.top) div 2-(expandsignsize div 2)), textrect.left+expandsignsize, textrect.top+((textrect.bottom-textrect.top) div 2+(expandsignsize div 2))+1);
-      sender.canvas.Rectangle(expandsign);
-
-      //horizontal line
-      sender.canvas.MoveTo(expandsign.Left + expandsignlineborderspace, textrect.top+(textrect.bottom-textrect.top) div 2);
-      sender.canvas.LineTo(expandsign.Right - expandsignlineborderspace, textrect.top+(textrect.bottom-textrect.top) div 2);
-
-
       if memrec.treenode.Expanded then
       begin
-        //vertical line
-        sender.canvas.MoveTo(expandsign.left+expandsignsize div 2, expandsign.Top + expandsignlineborderspace);
-        sender.canvas.LineTo(expandsign.left+expandsignsize div 2, expandsign.Bottom - expandsignlineborderspace);
+        sender.canvas.MoveTo(expandsign.Left+Scaled(2), expandsign.Top+Scaled(3));
+        sender.canvas.LineTo((expandsign.Left+expandsign.Right) div 2,
+          expandsign.Bottom-Scaled(3));
+        sender.canvas.LineTo(expandsign.Right-Scaled(2), expandsign.Top+Scaled(3));
+      end
+      else
+      begin
+        sender.canvas.MoveTo(expandsign.Left+Scaled(3), expandsign.Top+Scaled(2));
+        sender.canvas.LineTo(expandsign.Right-Scaled(3),
+          (expandsign.Top+expandsign.Bottom) div 2);
+        sender.canvas.LineTo(expandsign.Left+Scaled(3), expandsign.Bottom-Scaled(2));
       end;
       inc(textrect.left,expandsignsize+1);
 
@@ -2123,14 +3114,24 @@ begin
 
     //draw checkbox
     oldpencolor:=sender.canvas.pen.color;
-    checkbox.Left:=textrect.left+1; //(header.Sections[0].Width div 2)-((linerect.bottom-linerect.top) div 2)+1;
-    checkbox.Right:=checkbox.left+(linerect.bottom-linerect.top)-2; //(header.Sections[0].Width div 2)+((linerect.bottom-linerect.top) div 2)-1;
-    checkbox.Top:=linerect.top+1;
-    checkbox.Bottom:=linerect.bottom-1;
+    iconSize:=min(Scaled(16),linerect.bottom-linerect.top-Scaled(4));
+    checkbox.Left:=textrect.left+Scaled(2);
+    checkbox.Right:=checkbox.left+iconSize;
+    checkbox.Top:=linerect.top+((linerect.bottom-linerect.top-iconSize) div 2);
+    checkbox.Bottom:=checkbox.top+iconSize;
 
 
 
-    if not memrec.AsyncProcessing then
+    if structuralHeader then
+    begin
+      sender.Canvas.Pen.Color:=fCheckboxActiveColor;
+      sender.Canvas.Pen.Width:=max(Scaled(2),bordersize);
+      sender.Canvas.Line(checkbox.Left+Scaled(3),checkbox.Top+Scaled(1),
+        checkbox.Left+Scaled(3),checkbox.Bottom-Scaled(1));
+      sender.Canvas.Pen.Width:=bordersize;
+      sender.Canvas.Pen.Color:=oldpencolor;
+    end
+    else if not memrec.AsyncProcessing then
     begin
 
 
@@ -2155,8 +3156,13 @@ begin
         sender.canvas.Line(checkbox.left+1,checkbox.Top+1, checkbox.Right-1,checkbox.bottom-1);
         sender.canvas.line(checkbox.left+1,checkbox.bottom-2, checkbox.right-1,checkbox.top);  }
 
-        sender.canvas.Line(checkbox.left,checkbox.Top, checkbox.Right-1,checkbox.bottom-1);
-        sender.canvas.line(checkbox.left,checkbox.bottom-1, checkbox.right-1,checkbox.top);
+        sender.canvas.Pen.Width:=max(1,Scaled(2));
+        sender.canvas.MoveTo(checkbox.left+Scaled(3),
+          checkbox.top+(iconSize div 2));
+        sender.canvas.LineTo(checkbox.left+(iconSize div 2)-Scaled(1),
+          checkbox.bottom-Scaled(3));
+        sender.canvas.LineTo(checkbox.right-Scaled(2),checkbox.top+Scaled(3));
+        sender.canvas.Pen.Width:=bordersize;
 
         sender.canvas.pen.color:=oldpencolor;
 
@@ -2245,57 +3251,66 @@ begin
 
       animationtimer.enabled:=true;
     end;
-    descriptionstart:=max(checkbox.right+10,header.Sections[1].Left);
+    descriptionstart:=max(checkbox.right+Scaled(10),
+      header.Sections[1].Left+Scaled(6)+Node.Level*Scaled(14));
 
 
 
 
-    linetop:=textrect.Top+1; ;//+((textrect.Bottom-textrect.Top) div 2)-(sender.canvas.TextHeight('DDDD') div 2);
+    linetop:=textrect.Top+((textrect.Bottom-textrect.Top-
+      sender.canvas.TextHeight('DDDD')) div 2);
 
 
     if (not memrec.isGroupHeader or memrec.isAddressGroupHeader) and (memrec.VarType<>vtAutoAssembler) then //if it's not a groupheader of auto assemble script then show the extra data
     begin
       //limit how far the texts go depending on the sections
-      sender.Canvas.TextRect(rect(descriptionstart, textrect.Top, header.Sections[1].right, textrect.bottom), descriptionstart, linetop, memrec.description);
+      sender.Canvas.TextRect(rect(descriptionstart, textrect.Top,
+        header.Sections[1].right-Scaled(6), textrect.bottom),
+        descriptionstart, linetop, memrec.description);
 
       //if this is not the currently dragged over node
       //or if it is and either CurrentlyDraggedOverBefore or CurrentlyDraggedOverAfter is set then draw the rest
       if not ((node=CurrentlyDraggedOverNode) and (not (CurrentlyDraggedOverBefore or CurrentlyDraggedOverAfter))) then //don't draw the rest on insert drag/drop
       begin
         //address
-        sender.Canvas.TextRect(rect(header.Sections[2].left, textrect.Top, header.Sections[2].right, textrect.bottom),header.Sections[2].Left, linetop, ansitoutf8(memrec.addressString));
+        if header.Sections[2].Visible then
+          sender.Canvas.TextRect(rect(header.Sections[2].left+Scaled(6),
+            textrect.Top, header.Sections[2].right-Scaled(6), textrect.bottom),
+            header.Sections[2].Left+Scaled(6), linetop,
+            ansitoutf8(memrec.addressString));
 
         if not memrec.isGroupHeader then
         begin
           //type
-          case memrec.vartype of
-            vtCustom: sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, memrec.CustomTypeName);
-            vtString:
-            begin
-              if not (memrec.Extra.stringData.unicode or memrec.Extra.stringData.codepage) then
-                sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(memrec.VarType)+'['+inttostr(memrec.Extra.stringData.length)+']')
-              else if memrec.Extra.stringData.unicode then
-                sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(vtUnicodeString)+'['+inttostr(memrec.Extra.stringData.length)+']')
-              else
-                sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(vtCodePageString)+'['+inttostr(memrec.Extra.stringData.length)+']');
-            end;
-            vtBinary:
-            begin
-              if memrec.Extra.bitData.bitlength=0 then
-                sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(memrec.VarType)+':'+inttostr(memrec.Extra.bitData.Bit)+'->idiot')
-              else
-                sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(memrec.VarType)+':'+inttostr(memrec.Extra.bitData.Bit)+'->'+inttostr(memrec.Extra.bitData.Bit+memrec.Extra.bitData.bitlength-1));
-            end
-            else
-            begin
-
-              sender.Canvas.TextRect(rect(header.Sections[3].left, textrect.Top, header.Sections[3].right, textrect.bottom),header.sections[3].left, linetop, VariableTypeToTranslatedString(memrec.VarType));
-            end
-          end;
+          if header.Sections[3].Visible then
+            sender.Canvas.TextRect(rect(header.Sections[3].left+Scaled(6),
+              textrect.Top, header.Sections[3].right-Scaled(6),
+              textrect.bottom), header.Sections[3].left+Scaled(6), linetop,
+              MemoryRecordTypeText(memrec));
 
 
           //value
-          sender.Canvas.TextRect(rect(header.Sections[4].left, textrect.top, header.Sections[4].right, textrect.bottom),header.sections[4].left, linetop, memrec.DisplayValue);
+          valueRight:=min(header.Sections[4].right,Sender.ClientWidth);
+          if memrec.DropDownCount>0 then
+            dec(valueRight,Scaled(22));
+          if valueRight>header.Sections[4].left+Scaled(10) then
+            sender.Canvas.TextRect(rect(header.Sections[4].left+Scaled(6),
+              textrect.top, valueRight-Scaled(4), textrect.bottom),
+              header.sections[4].left+Scaled(6), linetop,
+              memrec.DisplayValue);
+
+          if (memrec.DropDownCount>0) and
+            (valueRight>header.Sections[4].left+Scaled(10)) then
+          begin
+            caretX:=min(header.Sections[4].right,Sender.ClientWidth)-Scaled(12);
+            sender.Canvas.Pen.Color:=sender.Canvas.Font.Color;
+            sender.Canvas.MoveTo(caretX-Scaled(4),
+              (textrect.Top+textrect.Bottom) div 2-Scaled(2));
+            sender.Canvas.LineTo(caretX,
+              (textrect.Top+textrect.Bottom) div 2+Scaled(2));
+            sender.Canvas.LineTo(caretX+Scaled(4),
+              (textrect.Top+textrect.Bottom) div 2-Scaled(2));
+          end;
         end;
       end;
     end
@@ -2312,7 +3327,24 @@ begin
             tempstring:=rsscript; //undo, it returned false
         end;
 
-        sender.Canvas.TextRect(rect(header.Sections[4].left, textrect.Top, header.Sections[4].right, textrect.bottom), header.sections[4].left, linetop, tempstring);
+        valueRight:=min(header.Sections[4].right,Sender.ClientWidth);
+        if memrec.LastAAExecutionFailed then dec(valueRight,Scaled(24));
+        if valueRight>header.Sections[4].left+Scaled(10) then
+          sender.Canvas.TextRect(rect(header.Sections[4].left+Scaled(6),
+            textrect.Top, valueRight-Scaled(4), textrect.bottom),
+            header.sections[4].left+Scaled(6), linetop, tempstring);
+
+        if memrec.LastAAExecutionFailed and
+          (valueRight>header.Sections[4].left) then
+        begin
+          sender.Canvas.Font.Color:=clRed;
+          sender.Canvas.Font.Style:=sender.Canvas.Font.Style+[fsBold];
+          sender.Canvas.TextOut(valueRight+Scaled(5),linetop,'!');
+          if memrec.isSelected then
+            sender.Canvas.Font.Color:=Graphics.clHighlightText
+          else
+            sender.Canvas.Font.Color:=memrec.Color;
+        end;
       end;
 
     end;
@@ -2328,10 +3360,16 @@ begin
         sender.Canvas.Line(descriptionstart+sender.canvas.textwidth(memrec.description)+1,(linerect.top+linerect.Bottom) div 2,linerect.right,(linerect.top+linerect.Bottom) div 2)
     end;
 
+    sender.Canvas.Pen.Color:=ColorSet.ButtonBorderColor;
+    sender.Canvas.Pen.Width:=1;
+    sender.Canvas.Line(0,linerect.Bottom-1,linerect.Right,
+      linerect.Bottom-1);
 
     if sender.Focused and node.Selected then
       sender.Canvas.DrawFocusRect(linerect);
 
+    sender.Canvas.Font.Style:=oldfontstyle;
+    sender.Canvas.TextStyle:=oldtextstyle;
     sender.Canvas.Brush.Color:=oldbrushcolor;
   end;
 
@@ -2373,9 +3411,13 @@ end;
 procedure TAddressList.DoAutoSize;
 begin
   DisableAutoSizing;
-  header.Height:=header.canvas.GetTextHeight('D')+4;
+  header.Height:=max(Scaled(28),header.canvas.GetTextHeight('D')+Scaled(8));
+  commandBar.Height:=max(Scaled(36),searchEdit.Font.GetTextHeight('D')+Scaled(16));
+  contextBar.Height:=max(Scaled(24),contextLabel.Font.GetTextHeight('D')+Scaled(8));
 
-  treeview.Indent:=Treeview.DefaultItemHeight; //checkbox.Bottom-checkbox.Top;
+  treeview.Indent:=Scaled(20);
+  treeview.DefaultItemHeight:=max(Scaled(22),
+    treeview.Font.GetTextHeight('D')+Scaled(6));
 
   EnableAutoSizing;
 
@@ -2390,10 +3432,130 @@ end;
 constructor TAddresslist.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  sortedColumn:=-1;
 
  // ShowHint:=true;
 
   descriptionhashlist:=TStringHashList.Create(false);
+
+  commandBar:=TPanel.Create(self);
+  commandBar.Name:='TableCommandBar';
+  commandBar.Parent:=self;
+  commandBar.Align:=alTop;
+  commandBar.Height:=Scaled(36);
+  commandBar.BevelOuter:=bvNone;
+  commandBar.Color:=ColorSet.TextBackground;
+  commandBar.ParentColor:=false;
+  commandBar.OnResize:=CommandBarResize;
+
+  searchEdit:=TEdit.Create(commandBar);
+  searchEdit.Name:='TableSearch';
+  searchEdit.Parent:=commandBar;
+  {Setting Name on a newly created TEdit can seed its Text through the LCL
+   caption machinery. Keep the internal component name out of the UI.}
+  searchEdit.Text:='';
+  searchEdit.TextHint:=rsSearchRecords;
+  {Ctrl+F or a mouse click enters search. Do not make an empty search field
+   the application's initial keyboard focus.}
+  searchEdit.TabStop:=false;
+  searchEdit.OnChange:=SearchEditChange;
+  searchEdit.OnKeyDown:=SearchEditKeyDown;
+
+  searchTimer:=TTimer.Create(self);
+  searchTimer.Enabled:=false;
+  searchTimer.Interval:=150;
+  searchTimer.OnTimer:=SearchTimerTimer;
+
+  btnClearSearch:=TButton.Create(commandBar);
+  btnClearSearch.Parent:=commandBar;
+  btnClearSearch.Caption:='x';
+  btnClearSearch.Hint:=rsClearSearch;
+  btnClearSearch.ShowHint:=true;
+  btnClearSearch.OnClick:=ClearSearchClick;
+  btnClearSearch.Visible:=false;
+
+  searchStatus:=TLabel.Create(commandBar);
+  searchStatus.Parent:=commandBar;
+  searchStatus.Alignment:=taRightJustify;
+  searchStatus.Layout:=tlCenter;
+  searchStatus.Font.Color:=ColorSet.InactiveFontColor;
+  searchStatus.ShowHint:=true;
+
+  btnExpandAll:=TButton.Create(commandBar);
+  btnExpandAll.Parent:=commandBar;
+  btnExpandAll.Caption:=rsExpandAll;
+  btnExpandAll.Hint:=rsExpandAll;
+  btnExpandAll.ShowHint:=true;
+  btnExpandAll.OnClick:=ExpandAllClick;
+
+  btnCollapseAll:=TButton.Create(commandBar);
+  btnCollapseAll.Parent:=commandBar;
+  btnCollapseAll.Caption:=rsCollapseAll;
+  btnCollapseAll.Hint:=rsCollapseAll;
+  btnCollapseAll.ShowHint:=true;
+  btnCollapseAll.OnClick:=CollapseAllClick;
+
+  btnAddRecord:=TButton.Create(commandBar);
+  btnAddRecord.Parent:=commandBar;
+  btnAddRecord.Caption:=rsAddRecord;
+  btnAddRecord.Hint:=rsAddRecord;
+  btnAddRecord.ShowHint:=true;
+  btnAddRecord.OnClick:=AddRecordClick;
+
+  btnMore:=TButton.Create(commandBar);
+  btnMore.Parent:=commandBar;
+  btnMore.Caption:='...';
+  btnMore.Hint:=rsMoreTableCommands;
+  btnMore.ShowHint:=true;
+  btnMore.OnClick:=MoreClick;
+
+  contextBar:=TPanel.Create(self);
+  contextBar.Name:='TableContextBar';
+  contextBar.Parent:=self;
+  contextBar.Align:=alTop;
+  contextBar.Top:=commandBar.Height;
+  contextBar.Height:=Scaled(24);
+  contextBar.BevelOuter:=bvNone;
+  contextBar.Color:=ColorSet.TextBackground;
+  contextBar.ParentColor:=false;
+  contextBar.Visible:=false;
+
+  contextLabel:=TLabel.Create(contextBar);
+  contextLabel.Parent:=contextBar;
+  contextLabel.Align:=alClient;
+  contextLabel.AutoSize:=false;
+  contextLabel.BorderSpacing.Left:=Scaled(8);
+  contextLabel.BorderSpacing.Right:=Scaled(8);
+  contextLabel.Layout:=tlCenter;
+  contextLabel.Font.Color:=ColorSet.FontColor;
+  contextLabel.ShowHint:=true;
+
+  commandPopup:=TPopupMenu.Create(commandBar);
+  miCommandCreateHeader:=TMenuItem.Create(commandPopup);
+  miCommandCreateHeader.Caption:=rsCreateHeader;
+  miCommandCreateHeader.OnClick:=CreateHeaderClick;
+  commandPopup.Items.Add(miCommandCreateHeader);
+
+  miCommandShowAddress:=TMenuItem.Create(commandPopup);
+  miCommandShowAddress.Caption:=rsShowAddressColumn;
+  miCommandShowAddress.AutoCheck:=false;
+  miCommandShowAddress.ShowAlwaysCheckable:=true;
+  miCommandShowAddress.OnClick:=ToggleAddressColumnClick;
+  commandPopup.Items.Add(miCommandShowAddress);
+
+  miCommandShowType:=TMenuItem.Create(commandPopup);
+  miCommandShowType.Caption:=rsShowTypeColumn;
+  miCommandShowType.AutoCheck:=false;
+  miCommandShowType.ShowAlwaysCheckable:=true;
+  miCommandShowType.OnClick:=ToggleTypeColumnClick;
+  commandPopup.Items.Add(miCommandShowType);
+
+  miCommandResetColumns:=TMenuItem.Create(commandPopup);
+  miCommandResetColumns.Caption:=rsResetColumnLayout;
+  miCommandResetColumns.OnClick:=ResetColumnsClick;
+  commandPopup.Items.Add(miCommandResetColumns);
+
+  CommandBarResize(commandBar);
 
   treeview:=TTreeviewWithScroll.create(self); //TTreeview.create(self);
   treeview.name:='List';
@@ -2428,8 +3590,10 @@ begin
   treeview.OnDragOver:=TVDragOver;
   treeview.OnDragDrop:=TVDragDrop;
   treeview.OnEndDrag:=TVDragEnd;
- // treeview.OnKeyDown:=treeviewkeydown;
-//  treeview.Indent:=32;
+  treeview.OnKeyDown:=TreeviewKeyDown;
+  treeview.OnMouseMove:=TreeviewMouseMove;
+  treeview.OnMouseLeave:=TreeviewMouseLeave;
+  treeview.Indent:=Scaled(20);
 
   treeview.OnCollapsing:=TreeviewOnCollapse;
   treeview.OnExpanding:=TreeviewOnExpand;
@@ -2440,58 +3604,62 @@ begin
   //treeview.Options:=treeview.Options+[tvoAllowMultiselect];    Horribly broken
 
   treeview.parent:=self;
+  treeview.TabOrder:=0;
+  commandBar.TabOrder:=1;
 
   treeview.Options:=treeview.options-[tvoAutoItemHeight];
-  treeview.Options:=treeview.options+[tvoAutoItemHeight];
+  treeview.DefaultItemHeight:=max(Scaled(22),treeview.Font.GetTextHeight('D')+Scaled(6));
 
 
 
 
-  header:=THeaderControl.Create(self);
+  header:=TAddressListHeaderControl.Create(self);
   header.name:='Header';
   header.parent:=self;
   header.Align:=alTop;
-  header.Height:=header.font.GetTextHeight('D')+4;
+  header.Top:=commandBar.Height+contextBar.Height;
+  header.Height:=Scaled(28);
 
   with header.Sections.Add do
   begin
     Text:=rsActive;
-    Width:=40;
-    MinWidth:=5;
+    Width:=Scaled(52);
+    MinWidth:=Scaled(32);
   end;
 
   with header.Sections.Add do
   begin
     Text:=rsDescription;
-    Width:=160;
-    MinWidth:=5;
+    Width:=Scaled(220);
+    MinWidth:=Scaled(80);
   end;
 
   with header.Sections.Add do
   begin
     Text:=rsAddress;
-    Width:=85;
-    MinWidth:=5;
+    Width:=Scaled(135);
+    MinWidth:=Scaled(70);
   end;
 
   with header.Sections.Add do
   begin
     Text:=rsType;
-    Width:=60;
-    MinWidth:=5;
+    Width:=Scaled(100);
+    MinWidth:=Scaled(60);
   end;
 
   with header.Sections.Add do
   begin
     Text:=rsValue;
     Width:=9000000;
-    MinWidth:=5;
+    MinWidth:=Scaled(80);
   end;
 
   header.OnSectionTrack:=SectionTrack;
 
   header.OnSectionClick:=SectionClick;
-  header.AutoSize:=true;
+  TAddressListHeaderControl(header).OnDblClick:=HeaderDblClick;
+  header.AutoSize:=false;
 
 
   headerpopup:=TPopupmenu.Create(header);
@@ -2505,6 +3673,9 @@ begin
 
   header.PopupMenu:=headerpopup;
 
+  SetColumnVisibility(
+    cereg.readBool('Addresslist: show address column', true),
+    cereg.readBool('Addresslist: show type column', true), false);
 
   treeview.ScrollBars:=ssVertical;
   treeview.Align:=alClient;
@@ -2513,9 +3684,9 @@ begin
 
 
 
-  checkboxActiveSelectedColor:=clRed;
-  CheckboxActiveColor:=clRed;
-  CheckboxSelectedColor:=clWindowtext;
+  checkboxActiveSelectedColor:=Graphics.clHighlightText;
+  CheckboxActiveColor:=clGreen;
+  CheckboxSelectedColor:=Graphics.clHighlightText;
   CheckboxColor:=clWindowtext;
   SelectedBackgroundColor:=clHighlight;
   SelectedSecondaryBackgroundColor:=clActiveCaption;
@@ -2528,6 +3699,11 @@ end;
 
 destructor TAddresslist.Destroy;
 begin
+  if AddressListEditor<>nil then
+  begin
+    AddressListEditor.CloseEditor(false);
+    FreeAndNil(AddressListEditor);
+  end;
   clear;
 
   symhandler.RemoveFinishedLoadingSymbolsNotification(SymbolsLoaded);

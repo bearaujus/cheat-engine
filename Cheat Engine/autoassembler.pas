@@ -156,6 +156,7 @@ resourcestring
   rsXCouldNotBeFound = '%s could not be found';
   rsAAErrorWhileSacnningForAobs = 'Error while scanning for AOB''s : ';
   rsAAError = 'Error: ';
+  rsAASignatureNotFoundRetry = 'Signature not found. The script may not support this process version, or the target code may not be loaded yet. You can retry after the target reaches the required screen; restarting Cheat Engine is not required.';
   rsAAModuleNotFound = 'module not found:';
   rsAALuaErrorInTheScriptAtLine = 'Lua error in the script at line ';
   rsGoTo = 'Go to ';
@@ -982,7 +983,7 @@ var i,j,k, m: integer;
       if aobscanmodules[f].memscan.GetErrorString<>'' then
         errorstring:=rsAAErrorWhileSacnningForAobs+aoblist+#13#10#13#10+rsAAError+aobscanmodules[f].memscan.GetErrorString
       else
-        errorstring:=rsAAErrorWhileSacnningForAobs+aoblist+#13#10#13#10+rsAAError+'Not all results found';
+        errorstring:=rsAAErrorWhileSacnningForAobs+aoblist+#13#10#13#10+rsAAError+rsAASignatureNotFoundRetry;
 
 
     end;
@@ -4678,7 +4679,6 @@ end;
 
 
 end.
-
 
 
 
