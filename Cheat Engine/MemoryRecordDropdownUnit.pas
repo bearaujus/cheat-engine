@@ -45,7 +45,7 @@ implementation
 
 function DropDownTextEquals(const A, B: string): boolean;
 begin
-  Result := AnsiCompareText(A, B) = 0;
+  Result := CompareText(A, B) = 0;
 end;
 
 function DropDownDisplayText(const Item: TDropDownItem;
@@ -200,7 +200,7 @@ end;
 function StartsWithText(const Text, Prefix: string): boolean;
 begin
   Result := (Prefix <> '') and
-    (AnsiCompareText(Copy(Text, 1, Length(Prefix)), Prefix) = 0);
+    (CompareText(Copy(Text, 1, Length(Prefix)), Prefix) = 0);
 end;
 
 function ContainsText(const Text, Fragment: string): boolean;

@@ -117,6 +117,27 @@ function Clear-GeneratedUnits {
     Write-Host "Removed stale generated units: $resolvedTarget"
 }
 
+function Write-CompilerOutputAndAssertClean(
+    [object[]]$Output,
+    [int]$ExitCode,
+    [string]$CommandName
+) {
+    foreach ($line in $Output) {
+        Write-Host "$line"
+    }
+
+    if ($ExitCode -ne 0) {
+        throw "$CommandName failed with exit code $ExitCode."
+    }
+
+    $diagnostics = @($Output | Where-Object {
+        "$_" -match '(?i)\b(note|warning|error|fatal):'
+    })
+    if ($diagnostics.Count -ne 0) {
+        throw "$CommandName completed with $($diagnostics.Count) compiler diagnostic line(s)."
+    }
+}
+
 function Assert-Project {
     if (-not (Test-Path -LiteralPath $projectFile -PathType Leaf)) {
         throw "The Lazarus project was not found: $projectFile"
@@ -164,10 +185,9 @@ function Invoke-LazBuild([string]$ResolvedLazBuild) {
             Write-Host "Using optimization level 0 for FPC 3.2.2 compatibility."
         }
 
-        & $ResolvedLazBuild $projectFile "--build-mode=$BuildMode"
-        if ($LASTEXITCODE -ne 0) {
-            throw "lazbuild failed with exit code $LASTEXITCODE."
-        }
+        $buildOutput = @(& $ResolvedLazBuild $projectFile "--build-mode=$BuildMode" 2>&1)
+        $buildExitCode = $LASTEXITCODE
+        Write-CompilerOutputAndAssertClean $buildOutput $buildExitCode 'lazbuild'
 
         $executable = Get-ExpectedExecutable
         if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
@@ -195,10 +215,10 @@ function Invoke-Tests {
 
     try {
         Write-Host 'Building dropdown tests for Windows x64...'
-        & $compiler '-Mdelphi' "-Fu$unitPath" "-FE$testOutput" "-FU$testOutput" $testSource
-        if ($LASTEXITCODE -ne 0) {
-            throw "Test compilation failed with exit code $LASTEXITCODE."
-        }
+        $compilerOutput = @(& $compiler '-Mdelphi' '-Sew' "-Fu$unitPath" `
+            "-FE$testOutput" "-FU$testOutput" $testSource 2>&1)
+        $compilerExitCode = $LASTEXITCODE
+        Write-CompilerOutputAndAssertClean $compilerOutput $compilerExitCode 'Test compilation'
 
         $testExecutable = Join-Path $testOutput 'memoryrecorddropdowntests.exe'
         & $testExecutable '--all'

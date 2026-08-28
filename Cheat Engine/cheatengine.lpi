@@ -80,11 +80,11 @@
               <ShowHints Value="False"/>
             </Verbosity>
             <WriteFPCLogo Value="False"/>
-            <!-- The legacy core mixes LCL UTF-8 strings with Windows UTF-16
-                 APIs. These two conversion classes remain a documented
-                 compatibility exception until those boundaries are typed. -->
+            <!-- Warnings 4104/4105 cover the legacy LCL UTF-8 and Windows
+                 UTF-16 boundary. Note 6058 is emitted by precompiled Lazarus
+                 2.2.2 units when FPC skips an optional inline optimization. -->
             <CompilerMessages>
-              <IgnoredMessages idx4105="True" idx4104="True"/>
+              <IgnoredMessages idx6058="True" idx4105="True" idx4104="True"/>
             </CompilerMessages>
             <CustomOptions Value="-Sew
 -WB00400000

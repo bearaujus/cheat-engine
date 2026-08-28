@@ -78,7 +78,7 @@ make clean
 
 The build writes `Cheat Engine\bin\cheatengine-x86_64.exe`. `make run` starts it with `Cheat Engine\bin` as its working directory so the checked-in runtime files are used. It passes `NOAUTORUN` and `NOFIRSTTIME`, so local runs do not load autorun extensions or show first-run language/tutorial prompts; normal launches without those arguments are unchanged.
 
-The supported release treats every compiler warning as a build failure. The only documented compatibility exception is FPC warning 4104/4105 at the legacy LCL UTF-8 and Windows UTF-16 boundary; that boundary requires a dedicated typed-string migration rather than potentially lossy casts.
+The supported release treats every compiler warning as a build failure. The documented compatibility exceptions are FPC warnings 4104/4105 at the legacy LCL UTF-8 and Windows UTF-16 boundary, plus FPC note 6058 from optional inline optimizations in the precompiled Lazarus 2.2.2 units. The string boundary requires a dedicated typed-string migration rather than potentially lossy casts; note 6058 does not affect correctness.
 
 For the bundled FPC 3.2.2 compiler, the helper temporarily uses optimization level 0 for the selected build mode. This avoids an intermittent FPC internal compiler error; the committed Lazarus project file is restored byte-for-byte after each build.
 
