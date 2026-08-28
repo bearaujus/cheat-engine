@@ -1,12 +1,13 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('CheckTools', 'Build', 'Run', 'Clean')]
+    [ValidateSet('CheckTools', 'Build', 'Run', 'Test', 'Clean')]
     [string]$Action,
 
-    [ValidateSet('x86', 'x64')]
+    [ValidateSet('x64')]
     [string]$Architecture = 'x64',
 
+    [ValidateSet('Release 64-Bit')]
     [string]$BuildMode = 'Release 64-Bit',
 
     [string]$LazarusDir,
@@ -19,6 +20,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectFile = Join-Path $repoRoot 'Cheat Engine\cheatengine.lpi'
 $binDir = Join-Path $repoRoot 'Cheat Engine\bin'
+
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw 'This product supports Windows x64 only.'
+}
+if (-not [Environment]::Is64BitOperatingSystem) {
+    throw 'This product requires a 64-bit Windows operating system.'
+}
 
 if ([string]::IsNullOrWhiteSpace($LazarusDir)) {
     $LazarusDir = Join-Path $repoRoot 'tools\lazarus'
@@ -68,11 +76,45 @@ function Find-Tool([string[]]$Names) {
 }
 
 function Get-ExpectedExecutable {
-    if ($Architecture -eq 'x86') {
-        return Join-Path $binDir 'cheatengine-i386.exe'
+    return Join-Path $binDir 'cheatengine-x86_64.exe'
+}
+
+function Get-GeneratedUnitDirectory {
+    return Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64'
+}
+
+function Assert-ExecutableNotRunning {
+    $executable = Get-ExpectedExecutable
+    $expectedPath = [System.IO.Path]::GetFullPath($executable)
+    foreach ($process in Get-Process -ErrorAction SilentlyContinue) {
+        try {
+            if (-not [string]::IsNullOrWhiteSpace($process.Path) -and
+                [System.IO.Path]::GetFullPath($process.Path).Equals(
+                    $expectedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Close the running '$($process.ProcessName)' instance (PID $($process.Id)) before building '$expectedPath'."
+            }
+        } catch [System.ComponentModel.Win32Exception] {
+            # Some system processes do not expose Path to a non-elevated shell.
+        }
+    }
+}
+
+function Clear-GeneratedUnits {
+    $generatedDirectory = Get-GeneratedUnitDirectory
+    if (-not (Test-Path -LiteralPath $generatedDirectory -PathType Container)) {
+        return
     }
 
-    return Join-Path $binDir 'cheatengine-x86_64.exe'
+    $resolvedRepo = [System.IO.Path]::GetFullPath($repoRoot)
+    $resolvedTarget = [System.IO.Path]::GetFullPath($generatedDirectory)
+    $safePrefix = Join-Path $resolvedRepo 'Cheat Engine\lib\'
+    if (-not $resolvedTarget.StartsWith(
+        $safePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to clean unexpected generated-unit path: $resolvedTarget"
+    }
+
+    Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
+    Write-Host "Removed stale generated units: $resolvedTarget"
 }
 
 function Assert-Project {
@@ -89,11 +131,7 @@ function Assert-Tools {
     }
 
     $resolvedLazBuild = Resolve-LazBuild
-    $compilerNames = if ($Architecture -eq 'x86') {
-        @('ppcross386.exe', 'ppc386.exe', 'fpc.exe')
-    } else {
-        @('ppcx64.exe', 'fpc.exe')
-    }
+    $compilerNames = @('ppcx64.exe', 'fpc.exe')
     $compiler = Find-Tool $compilerNames
     if ($null -eq $compiler) {
         throw "Unable to find an FPC compiler for $Architecture under '$LazarusDir'."
@@ -109,11 +147,17 @@ function Assert-Tools {
 }
 
 function Invoke-LazBuild([string]$ResolvedLazBuild) {
+    Assert-ExecutableNotRunning
+    # FPC 3.2.2 can crash internally when this project incrementally reuses
+    # units after widely referenced declarations change. A clean unit build is
+    # slower but deterministic and avoids presenting compiler AVs to users.
+    Clear-GeneratedUnits
+
     $projectBytes = [System.IO.File]::ReadAllBytes($projectFile)
     $projectText = [System.Text.Encoding]::UTF8.GetString($projectBytes)
     $buildModePattern = '(?s)(<Item\d+ Name="' + [regex]::Escape($BuildMode) + '".*?<OptimizationLevel Value=")3(".*?</Item\d+>)'
     $buildProjectText = [regex]::Replace($projectText, $buildModePattern, '${1}0${2}', 1)
-    Write-Host "Building $Architecture with mode '$BuildMode'..."
+    Write-Host "Building Windows x64 with mode '$BuildMode'..."
     try {
         if ($buildProjectText -ne $projectText) {
             [System.IO.File]::WriteAllText($projectFile, $buildProjectText, [System.Text.UTF8Encoding]::new($false))
@@ -136,6 +180,38 @@ function Invoke-LazBuild([string]$ResolvedLazBuild) {
     Write-Host "Built: $executable"
 }
 
+function Invoke-Tests {
+    $compilerNames = @('ppcx64.exe')
+    $compiler = Find-Tool $compilerNames
+    if ($null -eq $compiler) {
+        throw "Unable to find the FPC test compiler for $Architecture."
+    }
+
+    $testSource = Join-Path $repoRoot 'Cheat Engine\tests\memoryrecorddropdowntests.lpr'
+    $unitPath = Join-Path $repoRoot 'Cheat Engine'
+    $testOutput = Join-Path ([System.IO.Path]::GetTempPath()) (
+        'cheat-engine-tests-x64-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $testOutput -Force | Out-Null
+
+    try {
+        Write-Host 'Building dropdown tests for Windows x64...'
+        & $compiler '-Mdelphi' "-Fu$unitPath" "-FE$testOutput" "-FU$testOutput" $testSource
+        if ($LASTEXITCODE -ne 0) {
+            throw "Test compilation failed with exit code $LASTEXITCODE."
+        }
+
+        $testExecutable = Join-Path $testOutput 'memoryrecorddropdowntests.exe'
+        & $testExecutable '--all'
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tests failed with exit code $LASTEXITCODE."
+        }
+    } finally {
+        if (Test-Path -LiteralPath $testOutput -PathType Container) {
+            Remove-Item -LiteralPath $testOutput -Recurse -Force
+        }
+    }
+}
+
 switch ($Action) {
     'CheckTools' {
         [void](Assert-Tools)
@@ -147,9 +223,9 @@ switch ($Action) {
     'Run' {
         $resolvedLazBuild = Assert-Tools
         $executable = Get-ExpectedExecutable
-        if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
-            Invoke-LazBuild $resolvedLazBuild
-        }
+        # Run always builds first. Never launch an older executable after a
+        # failed compilation merely because a stale output file still exists.
+        Invoke-LazBuild $resolvedLazBuild
 
         Write-Host "Running $executable"
         $process = Start-Process -FilePath $executable -WorkingDirectory $binDir -ArgumentList @('NOAUTORUN', 'NOFIRSTTIME') -PassThru
@@ -158,9 +234,12 @@ switch ($Action) {
             throw "The application exited with code $($process.ExitCode)."
         }
     }
+    'Test' {
+        [void](Assert-Tools)
+        Invoke-Tests
+    }
     'Clean' {
         $outputs = @(
-            (Join-Path $binDir 'cheatengine-i386.exe'),
             (Join-Path $binDir 'cheatengine-x86_64.exe'),
             (Join-Path $binDir 'cheatengine-x86_64-SSE4-AVX2.exe')
         )
@@ -172,7 +251,6 @@ switch ($Action) {
         }
 
         $generatedDirectories = @(
-            (Join-Path $repoRoot 'Cheat Engine\lib\i386-win32'),
             (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64'),
             (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-SSE4-AVX-win64')
         )

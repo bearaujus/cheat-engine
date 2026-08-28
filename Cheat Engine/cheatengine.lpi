@@ -33,8 +33,8 @@
       <StringTable CompanyName="Cheat Engine" FileDescription="Cheat Engine" ProductVersion="7.5"/>
     </VersionInfo>
     <BuildModes Count="11">
-      <Item1 Name="Release 32-Bit" Default="True"/>
-      <Item2 Name="Release 64-Bit">
+      <Item1 Name="Release 32-Bit"/>
+      <Item2 Name="Release 64-Bit" Default="True">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -80,10 +80,14 @@
               <ShowHints Value="False"/>
             </Verbosity>
             <WriteFPCLogo Value="False"/>
+            <!-- The legacy core mixes LCL UTF-8 strings with Windows UTF-16
+                 APIs. These two conversion classes remain a documented
+                 compatibility exception until those boundaries are typed. -->
             <CompilerMessages>
-              <IgnoredMessages idx6058="True" idx5066="True" idx5043="True" idx4105="True" idx4104="True" idx3177="True" idx3175="True" idx2005="True"/>
+              <IgnoredMessages idx4105="True" idx4104="True"/>
             </CompilerMessages>
-            <CustomOptions Value="-WB00400000
+            <CustomOptions Value="-Sew
+-WB00400000
 -dbenchmarkps
 -dcemain
 -dNDEBUG
