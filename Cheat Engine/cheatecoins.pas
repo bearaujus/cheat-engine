@@ -100,6 +100,7 @@ var
   newv: pinteger;
 begin
   result:=EXCEPTION_CONTINUE_SEARCH;
+  s:='';
 
   //MEssageBoxA(0,'e 1','exeption',0);
 
@@ -276,7 +277,7 @@ begin
       //s:=format('Address = %.8x rip=%.8x rax=%.8x r8=%.8x', [ptruint(ExceptionInfo^.ExceptionRecord.ExceptionAddress), c^.rip, c^.rax, c^.r8]);
 
 
-      for i:=0 to ExceptionInfo^.ExceptionRecord.NumberParameters do
+      for i:=0 to ExceptionInfo^.ExceptionRecord.NumberParameters-1 do
       begin
         s:=s+' '+inttostr(i)+':'+inttohex(ExceptionInfo^.ExceptionRecord^.ExceptionInformation[i],1);
       end;
@@ -298,26 +299,29 @@ begin
 
 end;
 
+procedure ControlResume; assembler; nostackframe;
+asm
+  {$ifdef cpu64}
+  pop r8
+  {$else}
+  pop ecx
+  {$endif}
+  ret
+end;
+
 function Control: integer; assembler;
-label oka;
 asm
   {$ifdef cpu64}
 
   mov rax,$101
   push r8
-  lea r8,oka
+  lea r8,[rip+ControlResume]
   mov dword [rax],12
-oka:
-  pop r8
-  nop
   {$else}
   mov eax,$101
   push ecx
-  lea ecx,oka
+  lea ecx,ControlResume
   mov dword [eax],12
-oka:
-  pop ecx
-  nop
   {$endif}
 end;
 
@@ -457,4 +461,3 @@ finalization
 
 
 end.
-

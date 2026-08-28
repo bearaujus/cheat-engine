@@ -136,6 +136,7 @@ var
 begin
   result:=false;
   userdefinedSymbols:=[];
+  symbollists:=[];
 
 
  // if HasBeenUpdatedSinceLastSync and (n.ChildNodes.Count>0) then
@@ -470,4 +471,3 @@ finalization
     freeandnil(symbolSyncThread);
 
 end.
-

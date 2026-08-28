@@ -442,13 +442,13 @@ end;
 
 function thread_suspend(L: PLua_State): integer; cdecl;
 begin
-  TCEThread(luaclass_getClassObject(L)).Suspend;
+  Windows.SuspendThread(TCEThread(luaclass_getClassObject(L)).Handle);
   result:=0;
 end;
 
 function thread_resume(L: PLua_State): integer; cdecl;
 begin
-  TCEThread(luaclass_getClassObject(L)).Resume;
+  Windows.ResumeThread(TCEThread(luaclass_getClassObject(L)).Handle);
   result:=0;
 end;
 
@@ -604,5 +604,4 @@ initialization
 
 
 end.
-
 

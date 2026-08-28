@@ -1128,6 +1128,7 @@ var
   i: integer;
 
   t: dword;
+  memoryAddress: pointer;
 begin
   InitThumbSupport;
 
@@ -1140,7 +1141,9 @@ begin
   opcode:=_opcode;
   x:=4;
   {$else}
-  readprocessmemory(processhandle, pointer(address), @LastDisassembleData.Bytes[0], 4, x);
+  memoryAddress:=nil;
+  Move(address,memoryAddress,SizeOf(memoryAddress));
+  readprocessmemory(processhandle, memoryAddress, @LastDisassembleData.Bytes[0], 4, x);
   opcode:=pdword(@LastDisassembleData.Bytes[0])^;
   {$endif}
 
@@ -1944,4 +1947,3 @@ begin
 end;
 
 end.
-

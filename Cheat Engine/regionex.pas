@@ -25,9 +25,8 @@ var
   lRGN: HRGN;
 begin
   lRGN := CreatePolygonRgn(@polygon[0], length(polygon), WINDING);
-  CombineRgn(Handle, Handle, lRGN, RGN_OR);
+  CombineRgn(Reference.Handle, Reference.Handle, lRGN, RGN_OR);
   DeleteObject(lRGN);
 end;
 
 end.
-

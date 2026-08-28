@@ -250,7 +250,7 @@ begin
     hr.free;
   end;
 
-  port:=ShortHostToNet(p);
+  port:=Sockets.htons(p);
 
   if getConnection=nil then
   begin
@@ -544,4 +544,3 @@ end;
 
 
 end.
-

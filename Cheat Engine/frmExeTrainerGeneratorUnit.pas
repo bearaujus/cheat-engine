@@ -174,7 +174,7 @@ begin
   r := FindFirst(basepath+'*.*', FaAnyfile, DirInfo);
   while (r = 0) do
   begin
-    if (DirInfo.Attr and FaVolumeId <> FaVolumeID) then
+    if DirInfo.Name<>'' then
     begin
       if ((DirInfo.Attr and FaDirectory) <> FaDirectory) then
         addFile(basepath+DirInfo.Name, folder)
@@ -602,7 +602,7 @@ begin
   r := FindFirst(dir + pathdelim+'*.*', FaAnyfile, DirInfo);
   while (r = 0) do
   begin
-    if (DirInfo.Attr and FaVolumeId <> FaVolumeID) then
+    if DirInfo.Name<>'' then
     begin
       if ((DirInfo.Attr and FaDirectory) <> FaDirectory) then
         addFiletoList(dir + pathdelim + DirInfo.Name)
@@ -865,4 +865,3 @@ initialization
   {$I frmExeTrainerGeneratorUnit.lrs}
 
 end.
-

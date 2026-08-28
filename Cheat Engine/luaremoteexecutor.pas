@@ -729,6 +729,8 @@ var
 begin
   re:=luaclass_getClassObject(L);
   result:=0;
+  widecharstrings:=nil;
+  objectlist:=nil;
   try
     if (lua_gettop(L)>=1) and (lua_istable(L,1)) then
     begin
@@ -928,4 +930,3 @@ initialization
   luaclass_register(TRemoteExecutor, remoteexecutor_addMetaData);
 
 end.
-

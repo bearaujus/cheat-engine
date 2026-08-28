@@ -2272,7 +2272,7 @@ begin
 
     if err then exit('?');
 
-    l:=UTF8CharacterLength(pchar(@dw));
+    l:=UTF8CodepointSize(pchar(@dw));
     if l=0 then l:=1;
     charlength:=l;
 
@@ -2337,7 +2337,7 @@ var
 begin
   dw:=getDwordValue(a, err);
   if not err then
-    result:=max(1,UTF8CharacterLength(pchar(@dw)))
+    result:=max(1,UTF8CodepointSize(pchar(@dw)))
   else
     result:=1;
 end;

@@ -1731,6 +1731,7 @@ function TArm32Instructionset.disassemble(var DisassembleAddress: ptruint{$ifdef
 var
   x: ptruint;
   i: integer;
+  memoryAddress: pointer;
 begin
   InitARM32Support;
 
@@ -1743,7 +1744,9 @@ begin
   opcode:=_opcode;
   x:=4;
   {$else}
-  readprocessmemory(processhandle, pointer(address), @LastDisassembleData.Bytes[0], 4, x);
+  memoryAddress:=nil;
+  Move(address,memoryAddress,SizeOf(memoryAddress));
+  readprocessmemory(processhandle, memoryAddress, @LastDisassembleData.Bytes[0], 4, x);
   opcode:=pdword(@LastDisassembleData.Bytes[0])^;
   {$endif}
 
@@ -2622,4 +2625,3 @@ end;
 {$endif}
 
 end.
-

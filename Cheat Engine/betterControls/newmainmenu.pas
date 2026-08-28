@@ -60,7 +60,7 @@ begin
 
     b.Style:=bsSolid;
 
-    mi.hbrBack:=b.handle; //GetSysColorBrush(DKGRAY_BRUSH); //b.Handle;
+    mi.hbrBack:=b.Reference.Handle;
     mia:=@mi;
     if windows.SetMenuInfo(m,mia) then
     begin
@@ -168,4 +168,3 @@ begin
 end;
 
 end.
-

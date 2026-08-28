@@ -112,7 +112,7 @@ begin
 
     position:=0;
     maxposition:=Pointerscanresults.count;
-    initialtime:=gettickcount;
+    initialtime:=GetTickCount64;
 
     try
       i:=0;
@@ -236,7 +236,7 @@ var
 begin
   if sorter<>nil then
   begin
-    difftime:=gettickcount-sorter.initialtime;
+    difftime:=GetTickCount64-sorter.initialtime;
 
     if sorter.position>10 then
     begin
@@ -289,4 +289,3 @@ begin
 end;
 
 end.
-

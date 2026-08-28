@@ -35,7 +35,7 @@ begin
   if msg=WM_CTLCOLORLISTBOX then
   begin
     SetTextColor(_wparam, ColorSet.FontColor);
-    exit(comboBoxdefaultBrush.handle);
+    exit(comboBoxdefaultBrush.Reference.Handle);
   end;
 
   result:=CallWindowProc(WNDPROC(OriginalComboboxListHandler), wnd, msg, _wparam, _lparam);
@@ -125,4 +125,3 @@ end;
 
 
 end.
-

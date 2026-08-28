@@ -735,7 +735,7 @@ var eventlist: array of THandle;
     cursor: boolean;
     cursorstart: dword;
 begin
-  cursorstart:=gettickcount;
+  cursorstart:=GetTickCount64;
   console.log:=tstringlist.create;
   console.cursorpos:=0;
 
@@ -765,7 +765,7 @@ begin
         lastmessage:=owner.shared.console.lastmessage;
         Synchronize(dokeyboard);
         SetEvent(owner.hashandledkeyboardevent);
-        cursorstart:=GetTickCount;
+        cursorstart:=GetTickCount64;
       end;
 
       WAIT_OBJECT_0+2:
@@ -776,7 +776,7 @@ begin
     end;
 
     if (owner.shared.console.consolevisible=1) and (console.cursor<>nil) then  //toggle the cursor visible or invisible based on the current time and if a key was pressed (keep the cursor visible rigth after pressing a key, so reset the timerstart)
-      console.cursor.visible:=(((GetTickCount-cursorstart) mod 1000)<500);
+      console.cursor.visible:=(((GetTickCount64-cursorstart) mod 1000)<500);
 
   end;
 
@@ -1823,4 +1823,3 @@ end;
 {$endif}
 
 end.
-

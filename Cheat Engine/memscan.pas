@@ -5943,7 +5943,7 @@ begin
   (*
   {$if defined(cpui386) or defined(cpux86_64)}
   Set8087CW($133f); //disable floating point exceptions in this thread
-  SetSSECSR($1f80);
+  SetMXCSR($1f80);
   {$endif}
   *)
 
@@ -8855,9 +8855,9 @@ begin
             if length(info.Name)>5 then
             begin
               //if found, delete them if older than 2 days
+              f:=usedtempdir+strCheatEngine+pathdelim+info.name;
               {$ifndef windows}
               //exclusivity means nothing to unix
-              f:=usedtempdir+strCheatEngine+pathdelim+info.name;
               if FileExists(f+PathDelim+'inuse.lock') then
               begin
                 iuf:=nil;
@@ -8913,7 +8913,7 @@ begin
   r := FindFirst(dir + pathdelim+'*.*', FaAnyfile, DirInfo);
   while (r = 0) and result do
   begin
-    if (DirInfo.Attr and FaVolumeId <> FaVolumeID) then
+    if DirInfo.Name<>'' then
     begin
       if ((DirInfo.Attr and FaDirectory) <> FaDirectory) then
         result := DeleteFile(dir + pathdelim + DirInfo.Name);

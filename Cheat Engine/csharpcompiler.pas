@@ -129,8 +129,7 @@ begin
   r := FindFirst(usedtempdir+'ce-cscode-*.dll', FaAnyfile, DirInfo);
   while (r = 0) do
   begin
-    if ((DirInfo.Attr and FaVolumeId) <> FaVolumeID) and
-       ((DirInfo.Attr and FaDirectory) <> FaDirectory) then
+    if (DirInfo.Attr and FaDirectory) <> FaDirectory then
     begin
       sa:=string(dirinfo.name).Split('-');
       if length(sa)=4 then
@@ -259,4 +258,3 @@ finalization
   {$endif}
 
 end.
-

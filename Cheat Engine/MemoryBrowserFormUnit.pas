@@ -1400,7 +1400,7 @@ begin
     frmiptlog.show;
     if log<>nil then
     begin
-      frmiptlog.loadlog(debuggerthread.CurrentThread.ThreadId.ToHexString+'-'+GetTickCount.ToHexString,log,logsize, contexthandler.InstructionPointerRegister^.getValue(context));
+      frmiptlog.loadlog(debuggerthread.CurrentThread.ThreadId.ToHexString+'-'+GetTickCount64.ToHexString,log,logsize, contexthandler.InstructionPointerRegister^.getValue(context));
       freemem(log);
     end;
 

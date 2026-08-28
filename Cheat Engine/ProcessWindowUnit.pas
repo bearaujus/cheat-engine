@@ -738,7 +738,7 @@ begin
         //this is a processless system
         MainForm.ProcessLabel.caption:='Remote System';
         processhandler.processid:=$FFFFFFFE;
-        processhandler.processhandle:=-2;
+        processhandler.processhandle:=High(THandle)-1;
 
         startdebuggerifneeded(false);
 
@@ -828,7 +828,7 @@ begin
   if (CurrentDebuggerInterface<>nil) and (CurrentDebuggerInterface is TGDBServerDebuggerInterface) then
   begin
     //use the currently selected processid for startdebuggerifneeded (for the vAttach packet)
-    processhandler.processhandle:=-2;
+    processhandler.processhandle:=High(THandle)-1;
     startdebuggerifneeded(false);
 
     onAPIPointerChange:=TGDBServerDebuggerInterface(currentdebuggerinterface).OnApiPointerChange;
@@ -1432,5 +1432,4 @@ initialization
   {$i ProcessWindowUnit.lrs}
 
 end.
-
 

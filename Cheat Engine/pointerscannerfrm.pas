@@ -15,7 +15,7 @@ uses
   CEFuncProc, NewKernelHandler, ValueFinder, PointerscanresultReader, maps,
   zstream, Sockets, registry, PageMap, CELazySocket,
   PointerscanNetworkCommands, resolve, pointeraddresslist, pointerscanworker,
-  PointerscanStructures, PointerscanController, sqlite3conn, sqldb,
+  PointerscanStructures, PointerscanController, sqlite3dyn, sqlite3conn, sqldb,
   frmSelectionlistunit, baseunix, commonTypeDefs;
 {$else}
 uses
@@ -26,7 +26,7 @@ uses
   NewKernelHandler, valuefinder, PointerscanresultReader, maps, zstream,
   WinSock2, Sockets, registry, PageMap, CELazySocket,
   PointerscanNetworkCommands, resolve, pointeraddresslist, pointerscanworker,
-  PointerscanStructures, PointerscanController, sqlite3conn, sqldb,
+  PointerscanStructures, PointerscanController, sqlite3dyn, sqlite3conn, sqldb,
   frmSelectionlistunit, commonTypeDefs, betterControls;
 
 {$endif}
@@ -3649,9 +3649,9 @@ begin
 
 
   {$ifdef cpu64}
-    SQLiteLibraryName:='.\win64\sqlite3.dll';
+    sqlite3dyn.SQLiteDefaultLibrary:='.\win64\sqlite3.dll';
   {$else}
-    SQLiteLibraryName:='.\win32\sqlite3.dll';
+    sqlite3dyn.SQLiteDefaultLibrary:='.\win32\sqlite3.dll';
   {$endif}
 
 
@@ -3868,5 +3868,4 @@ initialization
   {$i pointerscannerfrm.lrs}
 
 end.
-
 

@@ -55,7 +55,7 @@ var
 begin
   result:=0;
   app:=luaclass_getClassObject(L);
-  lua_pushboolean(L, not app.MainFormOnTaskBar);  //bug in laz 2.0.6, it's inverted
+  lua_pushboolean(L, app.TaskBarBehavior=tbSingleButton);
   result:=1;
 end;
 
@@ -67,7 +67,10 @@ begin
   if lua_gettop(L)>=1 then
   begin
     app:=luaclass_getClassObject(L);
-    app.MainFormOnTaskBar:=not lua_toboolean(L,1);
+    if lua_toboolean(L,1) then
+      app.TaskBarBehavior:=tbSingleButton
+    else
+      app.TaskBarBehavior:=tbMultiButton;
   end;
 end;
 
@@ -126,4 +129,3 @@ initialization
 
 
 end.
-

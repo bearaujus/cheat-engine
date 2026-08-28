@@ -2530,6 +2530,8 @@ var buf: tmemorystream;
   i: uint32;
   s: string;
   t: byte;
+  encodedType: PtrUInt;
+  typeObject: TObject;
 begin
   buf:=tmemorystream.create;
   buf.WriteByte(CMD_ENUMFILES);
@@ -2545,7 +2547,12 @@ begin
     if s<>'' then
     begin
       receive(@t,1);
-      list.AddObject(s, tobject(pointer(t)));
+      {TStrings.Objects is historically used here to carry the remote file
+       type. Preserve that API without an ordinal-to-pointer cast.}
+      encodedType:=t;
+      typeObject:=nil;
+      Move(encodedType,typeObject,SizeOf(typeObject));
+      list.AddObject(s,typeObject);
     end;
   until s='';
 end;
@@ -2816,4 +2823,3 @@ finalization
   LocalToolhelpSnapshotsCS.free;
 
 end.
-

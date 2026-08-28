@@ -107,7 +107,7 @@ c.destroy()
 interface
 
 uses
-  Classes, SysUtils, db, sqldb, sqlite3, sqlite3conn, odbcconn, BufDataset,
+  Classes, SysUtils, db, sqldb, sqlite3, sqlite3dyn, sqlite3conn, odbcconn, BufDataset,
   LuaComponent, LuaClass, luaobject, lua, lualib, lauxlib, typinfo;
 
 procedure initializeLuaSQL;
@@ -157,7 +157,7 @@ end;
 function setSQLiteLibraryName(L: Plua_State): integer; cdecl;
 begin
   if lua_gettop(L)=1 then
-    SQLiteLibraryName:=Lua_ToString(L,1);
+    sqlite3dyn.SQLiteDefaultLibrary:=Lua_ToString(L,1);
 
   result:=0;
 end;
@@ -1538,9 +1538,9 @@ end;
 
 initialization
   {$ifdef cpu64}
-    SQLiteLibraryName:='.\win64\sqlite3.dll';
+    sqlite3dyn.SQLiteDefaultLibrary:='.\win64\sqlite3.dll';
   {$else}
-    SQLiteLibraryName:='.\win32\sqlite3.dll';
+    sqlite3dyn.SQLiteDefaultLibrary:='.\win32\sqlite3.dll';
   {$endif}
   luaclass_register(TODBCConnection, odbcconnection_addMetaData);
   luaclass_register(TSQLite3Connection,  sqlite3connection_addMetaData);
@@ -1571,4 +1571,3 @@ initialization
   registerclass(TSQLTransaction);
   registerclass(TSQLQuery);
 end.
-
