@@ -15,7 +15,7 @@ help:
 	@echo   make build         Build the Windows x64 release
 	@echo   make run           Build and run the Windows x64 release locally
 	@echo   make test          Run the Windows x64 unit tests
-	@echo   make clean         Remove generated main executables
+	@echo   make clean         Remove generated x64 build outputs
 	@echo.
 	@echo Override paths when needed:
 	@echo   make LAZARUS_DIR=C:\path\to\lazarus build

@@ -267,7 +267,13 @@ switch ($Action) {
     'Clean' {
         $outputs = @(
             (Join-Path $binDir 'cheatengine-x86_64.exe'),
-            (Join-Path $binDir 'cheatengine-x86_64-debug.exe')
+            (Join-Path $binDir 'cheatengine-x86_64.dbg'),
+            (Join-Path $binDir 'cheatengine-x86_64-debug.exe'),
+            (Join-Path $binDir 'cheatengine-x86_64-debug.dbg'),
+            (Join-Path $binDir 'cheatengine-i386.exe'),
+            (Join-Path $binDir 'cheatengine-i386.dbg'),
+            (Join-Path $binDir 'cheatengine-x86_64-SSE4-AVX2.exe'),
+            (Join-Path $binDir 'cheatengine-x86_64-SSE4-AVX2.dbg')
         )
         foreach ($output in $outputs) {
             if (Test-Path -LiteralPath $output -PathType Leaf) {
@@ -278,7 +284,9 @@ switch ($Action) {
 
         $generatedDirectories = @(
             (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64'),
-            (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64-debug')
+            (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64-debug'),
+            (Join-Path $repoRoot 'Cheat Engine\lib\i386-win32'),
+            (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-SSE4-AVX-win64')
         )
         foreach ($generatedDirectory in $generatedDirectories) {
             if (Test-Path -LiteralPath $generatedDirectory -PathType Container) {
