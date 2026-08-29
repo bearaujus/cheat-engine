@@ -1686,7 +1686,6 @@ object MainForm: TMainForm
     end
     object btnAddAddressManually: TButton
       AnchorSideRight.Control = btnTableOptions
-      AnchorSideRight.Side = asrLeft
       AnchorSideBottom.Control = Panel5
       AnchorSideBottom.Side = asrBottom
       Left = 557
