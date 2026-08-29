@@ -12,7 +12,7 @@ uses
   LCLIntf, LCLType, Classes, SysUtils, Forms, controls, stdctrls, comctrls, ExtCtrls, graphics,
   math, MemoryRecordUnit, FPCanvas, CEFuncProc, NewKernelHandler, menus,dom,
   XMLRead,XMLWrite, symbolhandler, AddresslistEditor, inputboxtopunit,
-  frmMemrecComboboxUnit, commonTypeDefs, multilineinputqueryunit, LazUTF8, StringHashList, betterControls;
+  frmMemrecComboboxUnit, commonTypeDefs, multilineinputqueryunit, StringHashList, betterControls;
 
 type
   TTreeviewWithScroll=class(TTreeview)
@@ -24,6 +24,8 @@ type
 
 type
   TAddressListHeaderControl=class(THeaderControl)
+  public
+    procedure PaintSection(Index: Integer); override;
   published
     property OnDblClick;
   end;
@@ -32,42 +34,17 @@ type
   TCompareRoutine=function(a: tmemoryrecord; b: tmemoryrecord): integer of object;
   TMemRecChangeEvent=function(sender: TObject; memrec: TMemoryRecord):boolean of object;
 
-  TAddressListNodeViewState=record
-    Node: TTreeNode;
-    Visible: boolean;
-    Expanded: boolean;
-    Selected: boolean;
-    MemoryRecordSelected: boolean;
-    MemoryRecordVisible: boolean;
-  end;
-
-  TAddressListNodeViewStates=array of TAddressListNodeViewState;
-
-
-
   TAddresslist=class(TPanel)
   private
     lastSelected: integer;
 
     header: THeaderControl;
-    commandBar: TPanel;
-    searchEdit: TEdit;
-    searchTimer: TTimer;
-    searchStatus: TLabel;
-    contextBar: TPanel;
-    contextLabel: TLabel;
-    btnClearSearch: TButton;
-    btnExpandAll: TButton;
-    btnCollapseAll: TButton;
-    btnAddRecord: TButton;
-    btnMore: TButton;
-    commandPopup: TPopupMenu;
-    miCommandCreateHeader: TMenuItem;
-    miCommandShowAddress: TMenuItem;
-    miCommandShowType: TMenuItem;
-    miCommandResetColumns: TMenuItem;
-    headerpopup: TPopupMenu;
+    tableOptionsPopup: TPopupMenu;
+    miCreateHeader: TMenuItem;
     miSortOnClick: TMenuItem;
+    miShowAddress: TMenuItem;
+    miShowType: TMenuItem;
+    miResetColumns: TMenuItem;
     Treeview: TTreeviewWithScroll; //TTreeview;//WithScroll;
     CurrentlyDraggedOverNode: TTreenode;
     CurrentlyDraggedOverBefore: boolean; //set to true if inserting before
@@ -105,11 +82,6 @@ type
     expandsignsize: integer;
     hoverNode: TTreeNode;
 
-    filterActive: boolean;
-    filterUpdating: boolean;
-    filterStates: TAddressListNodeViewStates;
-    filterTopNode: TTreeNode;
-
     sortlevel0only: boolean;
 
     descriptionhashlist: TStringhashList;
@@ -117,29 +89,9 @@ type
     procedure doAnimation(sender: TObject);
     function Scaled(Value: integer): integer;
     function IsStructuralHeader(memrec: TMemoryRecord): boolean;
-    function MemoryRecordPath(memrec: TMemoryRecord): string;
-    procedure UpdateContextStatus;
     function MemoryRecordTypeText(memrec: TMemoryRecord): string;
-    function MemoryRecordMatchesFilter(memrec: TMemoryRecord;
-      const Query: string): boolean;
     function NodeIsInTree(Node: TTreeNode): boolean;
-    function BaselineNodeVisible(Node: TTreeNode): boolean;
-    function FindFilterState(Node: TTreeNode): integer;
-    procedure CaptureFilterState;
-    procedure RestoreFilterState;
-    procedure ApplyFilter;
-    procedure ClearFilter;
     procedure PrepareForStructureChange;
-    procedure SearchEditChange(Sender: TObject);
-    procedure SearchTimerTimer(Sender: TObject);
-    procedure SearchEditKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
-    procedure ClearSearchClick(Sender: TObject);
-    procedure CommandBarResize(Sender: TObject);
-    procedure ExpandAllClick(Sender: TObject);
-    procedure CollapseAllClick(Sender: TObject);
-    procedure AddRecordClick(Sender: TObject);
-    procedure MoreClick(Sender: TObject);
     procedure CreateHeaderClick(Sender: TObject);
     procedure ToggleAddressColumnClick(Sender: TObject);
     procedure ToggleTypeColumnClick(Sender: TObject);
@@ -169,8 +121,6 @@ type
     procedure TreeviewMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure TreeviewMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure TreeviewMouseLeave(Sender: TObject);
-    procedure TreeviewKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-
     procedure EditorDoubleclick(sender: tobject); //callback
     procedure MultiEdit(memrec: Tmemoryrecord);
 
@@ -248,6 +198,7 @@ type
 
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    procedure ShowTableOptions(Anchor: TControl);
     property Items: TTreeNodes read getTreeNodes write SetTreeNodes;
 
     procedure clear;
@@ -263,8 +214,6 @@ type
 
 
     property headers: THeaderControl read header;
-    property TableCommandBar: TPanel read commandBar;
-    property TableContextBar: TPanel read contextBar;
   published
     property LoadedTableVersion: integer read getLoadedTableVersion;
 
@@ -295,7 +244,7 @@ implementation
 
 uses dialogs, formAddressChangeUnit, TypePopup, PasteTableentryFRM, MainUnit,
   ProcessHandlerUnit, frmEditHistoryUnit, globals, Filehandler, ceregistry,
-  memrecDataStructures, opensave;
+  memrecDataStructures, opensave, Themes;
 
 resourcestring
   rsDoYouWantToDeleteTheSelectedAddress = 'Do you want to delete the selected address?';
@@ -317,15 +266,6 @@ resourcestring
   rsALNoDescription = 'No description';
   rsALAutoAssembleScritp = 'Auto Assemble script';
   rsSortOnClick = 'Sort on click';
-  rsSearchRecords = 'Search table records';
-  rsNoSearchMatches = 'No matches';
-  rsOneSearchMatch = '1 match';
-  rsSearchMatches = '%d matches';
-  rsClearSearch = 'Clear search';
-  rsExpandAll = 'Expand all';
-  rsCollapseAll = 'Collapse all';
-  rsAddRecord = 'Add record';
-  rsMoreTableCommands = 'More table commands';
   rsCreateHeader = 'Create header';
   rsShowAddressColumn = 'Show Address column';
   rsShowTypeColumn = 'Show Type column';
@@ -351,6 +291,57 @@ begin
   inherited MouseDown(button, shift, x,y);
 end;
 
+procedure TAddressListHeaderControl.PaintSection(Index: Integer);
+const
+  AlignmentMap: array[TAlignment] of Cardinal = (DT_LEFT, DT_RIGHT, DT_CENTER);
+  HeaderStateMap: array[THeaderSectionState] of TThemedHeader =
+    (thHeaderItemNormal, thHeaderItemHot, thHeaderItemPressed);
+var
+  ARect, ContentRect: TRect;
+  Details: TThemedElementDetails;
+  Inset: integer;
+  Section: THeaderSection;
+  TextStyle: TTextStyle;
+begin
+  Section:=Sections[Index];
+  if not Section.Visible or (Section.Right<=Section.Left) then exit;
+
+  ARect:=Rect(Section.Left,0,Section.Right,Height);
+  Inset:=max(1,round(6*Font.PixelsPerInch/96));
+
+  if ShouldAppsUseDarkMode then
+  begin
+    case Section.State of
+      hsNormal: Canvas.Brush.Color:=ColorSet.TextBackground;
+      hsHot: Canvas.Brush.Color:=incColor(ColorSet.TextBackground,16);
+      hsPressed: Canvas.Brush.Color:=incColor(ColorSet.TextBackground,32);
+    end;
+    Canvas.Pen.Color:=ColorSet.ButtonBorderColor;
+    Canvas.FillRect(ARect);
+    Canvas.Rectangle(ARect);
+
+    ContentRect:=ARect;
+    ContentRect.Left:=ContentRect.Left+Inset;
+    ContentRect.Right:=ContentRect.Right-Inset;
+    TextStyle:=Canvas.TextStyle;
+    TextStyle.Alignment:=Section.Alignment;
+    TextStyle.Layout:=tlCenter;
+    Canvas.TextRect(ContentRect,ContentRect.Left,0,Section.Text,TextStyle);
+  end
+  else
+  begin
+    Details:=ThemeServices.GetElementDetails(HeaderStateMap[Section.State]);
+    ThemeServices.DrawElement(Canvas.Handle,Details,ARect);
+    ContentRect:=ThemeServices.ContentRect(Canvas.Handle,Details,ARect);
+    if CompareMem(@ContentRect,@ARect,SizeOf(ARect)) then
+      InflateRect(ContentRect,-3,-3);
+    ContentRect.Left:=max(ContentRect.Left,ARect.Left+Inset);
+    ContentRect.Right:=min(ContentRect.Right,ARect.Right-Inset);
+    ThemeServices.DrawText(Canvas,Details,Section.Text,ContentRect,
+      AlignmentMap[Section.Alignment] or DT_VCENTER or DT_SINGLELINE,0);
+  end;
+end;
+
 function TAddresslist.Scaled(Value: integer): integer;
 begin
   Result:=max(1, round(Value*Screen.PixelsPerInch/96));
@@ -362,53 +353,6 @@ begin
     (moAlwaysExpandChildren in memrec.Options) and
     (not (moActivateChildrenAsWell in memrec.Options)) and
     (not (moDeactivateChildrenAsWell in memrec.Options));
-end;
-
-function TAddresslist.MemoryRecordPath(memrec: TMemoryRecord): string;
-var
-  Node: TTreeNode;
-  Current: TMemoryRecord;
-  Part: string;
-begin
-  Result:='';
-  if memrec=nil then exit;
-
-  Node:=memrec.TreeNode;
-  while Node<>nil do
-  begin
-    Current:=TMemoryRecord(Node.Data);
-    if (Current<>nil) and ((Node.Parent<>nil) or (Result='')) then
-    begin
-      Part:=Trim(Current.Description);
-      if Current.isGroupHeader and (Length(Part)>=2) and
-        (Part[1]='[') and (Part[Length(Part)]=']') then
-        Part:=Trim(Copy(Part,2,Length(Part)-2));
-
-      if Part<>'' then
-      begin
-        if Result='' then
-          Result:=Part
-        else
-          Result:=Part+'  >  '+Result;
-      end;
-    end;
-    Node:=Node.Parent;
-  end;
-end;
-
-procedure TAddresslist.UpdateContextStatus;
-var
-  MR: TMemoryRecord;
-begin
-  if (contextBar=nil) or (contextLabel=nil) then exit;
-
-  MR:=nil;
-  if Treeview.Selected<>nil then
-    MR:=TMemoryRecord(Treeview.Selected.Data);
-
-  contextLabel.Caption:=MemoryRecordPath(MR);
-  contextLabel.Hint:=contextLabel.Caption;
-  contextBar.Visible:=contextLabel.Caption<>'';
 end;
 
 function TAddresslist.MemoryRecordTypeText(memrec: TMemoryRecord): string;
@@ -441,32 +385,6 @@ begin
   end;
 end;
 
-function TAddresslist.MemoryRecordMatchesFilter(memrec: TMemoryRecord;
-  const Query: string): boolean;
-var
-  Haystack, Needle: string;
-begin
-  Needle:=UTF8UpperCase(Trim(Query));
-  if Needle='' then exit(true);
-
-  Haystack:=memrec.Description;
-  try
-    Haystack:=Haystack+#10+memrec.AddressString;
-  except
-    { A custom address callback must not break the search UI. }
-  end;
-  try
-    Haystack:=Haystack+#10+MemoryRecordTypeText(memrec);
-  except
-  end;
-  try
-    Haystack:=Haystack+#10+memrec.DisplayValue;
-  except
-    { Display callbacks may depend on a process that is no longer open. }
-  end;
-  Result:=pos(Needle, UTF8UpperCase(Haystack))>0;
-end;
-
 function TAddresslist.NodeIsInTree(Node: TTreeNode): boolean;
 var
   I: integer;
@@ -478,325 +396,7 @@ begin
       exit(true);
 end;
 
-function TAddresslist.FindFilterState(Node: TTreeNode): integer;
-var
-  I: integer;
-begin
-  Result:=-1;
-  if Node=nil then exit;
-
-  I:=Node.AbsoluteIndex;
-  if (I>=0) and (I<length(filterStates)) and (filterStates[I].Node=Node) then
-    exit(I);
-
-  for I:=0 to high(filterStates) do
-    if filterStates[I].Node=Node then
-      exit(I);
-end;
-
-function TAddresslist.BaselineNodeVisible(Node: TTreeNode): boolean;
-var
-  StateIndex: integer;
-  MR: TMemoryRecord;
-begin
-  Result:=false;
-  if Node=nil then exit;
-
-  StateIndex:=FindFilterState(Node);
-  if StateIndex=-1 then
-    exit(Node.Visible);
-
-  MR:=TMemoryRecord(Node.Data);
-  if (MR<>nil) and
-    (MR.Visible<>filterStates[StateIndex].MemoryRecordVisible) then
-    Result:=MR.Visible
-  else
-    Result:=filterStates[StateIndex].Visible;
-end;
-
-procedure TAddresslist.CaptureFilterState;
-var
-  I: integer;
-  MR: TMemoryRecord;
-begin
-  setlength(filterStates, Treeview.Items.Count);
-  for I:=0 to Treeview.Items.Count-1 do
-  begin
-    filterStates[I].Node:=Treeview.Items[I];
-    filterStates[I].Visible:=Treeview.Items[I].Visible;
-    filterStates[I].Expanded:=Treeview.Items[I].Expanded;
-    filterStates[I].Selected:=Treeview.Items[I].Selected;
-    MR:=TMemoryRecord(Treeview.Items[I].Data);
-    filterStates[I].MemoryRecordSelected:=(MR<>nil) and MR.isSelected;
-    filterStates[I].MemoryRecordVisible:=(MR<>nil) and MR.Visible;
-  end;
-  filterTopNode:=Treeview.TopItem;
-  filterActive:=true;
-end;
-
-procedure TAddresslist.RestoreFilterState;
-var
-  I, StateIndex: integer;
-  MR: TMemoryRecord;
-  Node: TTreeNode;
-  OldOnExpanding: TTVExpandingEvent;
-  OldOnCollapsing: TTVCollapsingEvent;
-begin
-  if not filterActive then exit;
-  filterUpdating:=true;
-  OldOnExpanding:=Treeview.OnExpanding;
-  OldOnCollapsing:=Treeview.OnCollapsing;
-  Treeview.OnExpanding:=nil;
-  Treeview.OnCollapsing:=nil;
-  try
-    { Walk the live tree rather than dereferencing snapshot pointers.  A Lua
-      script may add or destroy a record while a search is active. }
-    for I:=0 to Treeview.Items.Count-1 do
-    begin
-      Node:=Treeview.Items[I];
-      StateIndex:=FindFilterState(Node);
-      if StateIndex<>-1 then
-      begin
-        MR:=TMemoryRecord(Node.Data);
-        if (MR<>nil) and
-          (MR.Visible<>filterStates[StateIndex].MemoryRecordVisible) then
-          Node.Visible:=MR.Visible
-        else
-          Node.Visible:=filterStates[StateIndex].Visible;
-      end;
-    end;
-
-    for I:=0 to Treeview.Items.Count-1 do
-    begin
-      Node:=Treeview.Items[I];
-      StateIndex:=FindFilterState(Node);
-      if StateIndex<>-1 then
-      begin
-        Node.Expanded:=filterStates[StateIndex].Expanded;
-        MR:=TMemoryRecord(Node.Data);
-        if MR<>nil then
-          MR.isSelected:=filterStates[StateIndex].MemoryRecordSelected and
-            Node.Visible;
-        Node.Selected:=filterStates[StateIndex].Selected and Node.Visible;
-      end;
-    end;
-
-    if filterTopNode<>nil then
-      for I:=0 to Treeview.Items.Count-1 do
-        if Treeview.Items[I]=filterTopNode then
-        begin
-          if filterTopNode.Visible then
-            Treeview.TopItem:=filterTopNode;
-          break;
-        end;
-  finally
-    Treeview.OnExpanding:=OldOnExpanding;
-    Treeview.OnCollapsing:=OldOnCollapsing;
-    filterUpdating:=false;
-    filterActive:=false;
-    filterTopNode:=nil;
-    setlength(filterStates, 0);
-  end;
-  Treeview.Refresh;
-end;
-
-procedure TAddresslist.ApplyFilter;
-var
-  Query: string;
-  DirectMatches, ShowNodes: array of boolean;
-  I, MatchCount, FirstMatch, StateIndex: integer;
-  Node, ParentNode: TTreeNode;
-  MR, ParentRecord: TMemoryRecord;
-  CanShow: boolean;
-  OldOnExpanding: TTVExpandingEvent;
-  OldOnCollapsing: TTVCollapsingEvent;
-
-  procedure MarkSubtree(Parent: TTreeNode);
-  var
-    Child: TTreeNode;
-    ChildIndex: integer;
-    ChildRecord: TMemoryRecord;
-  begin
-    Child:=Parent.GetFirstChild;
-    while Child<>nil do
-    begin
-      ChildIndex:=Child.AbsoluteIndex;
-      ChildRecord:=TMemoryRecord(Child.Data);
-      if (ChildIndex>=0) and (ChildIndex<length(ShowNodes)) and
-        BaselineNodeVisible(Child) and (ChildRecord<>nil) and
-        ChildRecord.Visible then
-      begin
-        ShowNodes[ChildIndex]:=true;
-        MarkSubtree(Child);
-      end;
-      Child:=Child.GetNextSibling;
-    end;
-  end;
-
-begin
-  if filterUpdating or (searchEdit=nil) then exit;
-  Query:=Trim(searchEdit.Text);
-  if Query='' then
-  begin
-    RestoreFilterState;
-    searchStatus.Caption:='';
-    UpdateContextStatus;
-    btnClearSearch.Visible:=false;
-    CommandBarResize(commandBar);
-    exit;
-  end;
-
-  if AddressListEditor<>nil then
-  begin
-    AddressListEditor.CloseEditor(false);
-    freeandnil(AddressListEditor);
-  end;
-
-  if not filterActive then CaptureFilterState;
-  setlength(DirectMatches, Treeview.Items.Count);
-  setlength(ShowNodes, Treeview.Items.Count);
-  MatchCount:=0;
-  FirstMatch:=-1;
-
-  for I:=0 to Treeview.Items.Count-1 do
-  begin
-    Node:=Treeview.Items[I];
-    MR:=TMemoryRecord(Node.Data);
-    DirectMatches[I]:=BaselineNodeVisible(Node) and (MR<>nil) and
-      MR.Visible and MemoryRecordMatchesFilter(MR, Query);
-    ShowNodes[I]:=DirectMatches[I];
-    if DirectMatches[I] then
-    begin
-      inc(MatchCount);
-      if FirstMatch=-1 then FirstMatch:=I;
-    end;
-  end;
-
-  for I:=0 to high(DirectMatches) do
-    if DirectMatches[I] then
-    begin
-      Node:=Treeview.Items[I];
-      ParentNode:=Node.Parent;
-      while ParentNode<>nil do
-      begin
-        ParentRecord:=TMemoryRecord(ParentNode.Data);
-        if BaselineNodeVisible(ParentNode) and (ParentRecord<>nil) and
-          ParentRecord.Visible then
-          ShowNodes[ParentNode.AbsoluteIndex]:=true;
-        ParentNode:=ParentNode.Parent;
-      end;
-
-      MR:=TMemoryRecord(Node.Data);
-      if (MR<>nil) and MR.isGroupHeader then
-        MarkSubtree(Node);
-    end;
-
-  filterUpdating:=true;
-  try
-    { Each query starts from the captured expansion state so searches do not
-      leave an ever-growing trail of expanded groups. }
-    OldOnExpanding:=Treeview.OnExpanding;
-    OldOnCollapsing:=Treeview.OnCollapsing;
-    Treeview.OnExpanding:=nil;
-    Treeview.OnCollapsing:=nil;
-    try
-      for I:=0 to Treeview.Items.Count-1 do
-      begin
-        StateIndex:=FindFilterState(Treeview.Items[I]);
-        if StateIndex<>-1 then
-          Treeview.Items[I].Expanded:=filterStates[StateIndex].Expanded;
-      end;
-    finally
-      Treeview.OnExpanding:=OldOnExpanding;
-      Treeview.OnCollapsing:=OldOnCollapsing;
-    end;
-
-    for I:=0 to Treeview.Items.Count-1 do
-    begin
-      MR:=TMemoryRecord(Treeview.Items[I].Data);
-      if MR<>nil then MR.isSelected:=false;
-      Treeview.Items[I].Visible:=ShowNodes[I];
-    end;
-
-    { Reveal every reachable match, while retaining the table's own rules for
-      protected groups such as moHideChildren. }
-    for I:=0 to high(DirectMatches) do
-      if DirectMatches[I] then
-      begin
-        Node:=Treeview.Items[I];
-        ParentNode:=Node.Parent;
-        while ParentNode<>nil do
-        begin
-          if ParentNode.Visible then ParentNode.Expanded:=true;
-          ParentNode:=ParentNode.Parent;
-        end;
-        MR:=TMemoryRecord(Node.Data);
-        if (MR<>nil) and MR.isGroupHeader and Node.Visible then
-          Node.Expanded:=true;
-      end;
-
-    FirstMatch:=-1;
-    for I:=0 to high(DirectMatches) do
-      if DirectMatches[I] then
-      begin
-        Node:=Treeview.Items[I];
-        CanShow:=Node.Visible;
-        ParentNode:=Node.Parent;
-        while CanShow and (ParentNode<>nil) do
-        begin
-          CanShow:=ParentNode.Visible and ParentNode.Expanded;
-          ParentNode:=ParentNode.Parent;
-        end;
-        if CanShow then
-        begin
-          FirstMatch:=I;
-          break;
-        end;
-      end;
-
-    if FirstMatch<>-1 then
-    begin
-      Node:=Treeview.Items[FirstMatch];
-      Treeview.Selected:=Node;
-      TMemoryRecord(Node.Data).isSelected:=true;
-    end;
-  finally
-    filterUpdating:=false;
-  end;
-
-  case MatchCount of
-    0: searchStatus.Caption:=rsNoSearchMatches;
-    1: searchStatus.Caption:=rsOneSearchMatch;
-    else searchStatus.Caption:=Format(rsSearchMatches, [MatchCount]);
-  end;
-  btnClearSearch.Visible:=true;
-  UpdateContextStatus;
-  CommandBarResize(commandBar);
-  Treeview.Refresh;
-end;
-
-procedure TAddresslist.ClearFilter;
-begin
-  if searchEdit=nil then exit;
-  if searchTimer<>nil then searchTimer.Enabled:=false;
-  filterUpdating:=true;
-  try
-    searchEdit.Text:='';
-  finally
-    filterUpdating:=false;
-  end;
-  RestoreFilterState;
-  searchStatus.Caption:='';
-  UpdateContextStatus;
-  btnClearSearch.Visible:=false;
-  CommandBarResize(commandBar);
-end;
-
 procedure TAddresslist.PrepareForStructureChange;
-var
-  SelectedRecords: array of TMemoryRecord;
-  FocusedRecord, MR: TMemoryRecord;
-  I, J, L: integer;
 begin
   if hoverNode<>nil then
   begin
@@ -805,192 +405,6 @@ begin
     Treeview.Hint:='';
     Treeview.ShowHint:=false;
   end;
-  if (not filterActive) and
-    ((searchEdit=nil) or (Trim(searchEdit.Text)='')) then exit;
-
-  setlength(SelectedRecords,0);
-  FocusedRecord:=nil;
-  if Treeview.Selected<>nil then
-    FocusedRecord:=TMemoryRecord(Treeview.Selected.Data);
-
-  for I:=0 to Count-1 do
-    if MemRecItems[I].isSelected then
-    begin
-      L:=length(SelectedRecords);
-      setlength(SelectedRecords,L+1);
-      SelectedRecords[L]:=MemRecItems[I];
-    end;
-
-  ClearFilter;
-
-  { Clearing a filter normally restores the selection that existed before the
-    search.  A structural command, however, must continue to act on what the
-    user selected in the filtered view. }
-  filterUpdating:=true;
-  try
-    Treeview.Selected:=nil;
-    for I:=0 to Count-1 do
-      MemRecItems[I].isSelected:=false;
-
-    for I:=0 to high(SelectedRecords) do
-      for J:=0 to Count-1 do
-      begin
-        MR:=MemRecItems[J];
-        if MR=SelectedRecords[I] then
-        begin
-          MR.isSelected:=MR.Visible and (MR.TreeNode<>nil) and
-            MR.TreeNode.Visible;
-          break;
-        end;
-      end;
-
-    if FocusedRecord<>nil then
-      for I:=0 to Count-1 do
-        if (MemRecItems[I]=FocusedRecord) and MemRecItems[I].isSelected then
-        begin
-          Treeview.Selected:=MemRecItems[I].TreeNode;
-          break;
-        end;
-
-    if (Treeview.Selected=nil) and (length(SelectedRecords)>0) then
-      for I:=0 to Count-1 do
-        if MemRecItems[I].isSelected then
-        begin
-          Treeview.Selected:=MemRecItems[I].TreeNode;
-          break;
-        end;
-  finally
-    filterUpdating:=false;
-  end;
-end;
-
-procedure TAddresslist.SearchEditChange(Sender: TObject);
-begin
-  if filterUpdating then exit;
-  searchTimer.Enabled:=false;
-  if Trim(searchEdit.Text)='' then
-    ApplyFilter
-  else
-    searchTimer.Enabled:=true;
-end;
-
-procedure TAddresslist.SearchTimerTimer(Sender: TObject);
-begin
-  searchTimer.Enabled:=false;
-  ApplyFilter;
-end;
-
-procedure TAddresslist.SearchEditKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
-begin
-  if Key=VK_ESCAPE then
-  begin
-    ClearFilter;
-    Treeview.SetFocus;
-    Key:=0;
-  end
-  else if Key=VK_RETURN then
-  begin
-    searchTimer.Enabled:=false;
-    ApplyFilter;
-    Treeview.SetFocus;
-    Key:=0;
-  end;
-end;
-
-procedure TAddresslist.ClearSearchClick(Sender: TObject);
-begin
-  ClearFilter;
-  searchEdit.SetFocus;
-end;
-
-procedure TAddresslist.CommandBarResize(Sender: TObject);
-var
-  X, H, Y, StatusWidth: integer;
-begin
-  if btnMore=nil then exit;
-  btnAddRecord.Visible:=commandBar.ClientWidth>=Scaled(260);
-  btnExpandAll.Visible:=commandBar.ClientWidth>=Scaled(430);
-  btnCollapseAll.Visible:=btnExpandAll.Visible;
-  StatusWidth:=Scaled(82);
-  searchStatus.Visible:=(searchStatus.Caption<>'') and
-    (Trim(searchEdit.Text)<>'') and
-    (commandBar.ClientWidth>=Scaled(560));
-  btnClearSearch.Visible:=(searchEdit.Text<>'') and
-    (commandBar.ClientWidth>=Scaled(190));
-
-  H:=Scaled(26);
-  Y:=(commandBar.ClientHeight-H) div 2;
-  X:=commandBar.ClientWidth-Scaled(6);
-
-  btnMore.SetBounds(X-Scaled(34),Y,Scaled(34),H);
-  X:=btnMore.Left-Scaled(4);
-  if btnAddRecord.Visible then
-  begin
-    btnAddRecord.SetBounds(X-Scaled(76),Y,Scaled(76),H);
-    X:=btnAddRecord.Left-Scaled(4);
-  end;
-  if btnCollapseAll.Visible then
-  begin
-    btnCollapseAll.SetBounds(X-Scaled(82),Y,Scaled(82),H);
-    X:=btnCollapseAll.Left-Scaled(2);
-    btnExpandAll.SetBounds(X-Scaled(72),Y,Scaled(72),H);
-    X:=btnExpandAll.Left-Scaled(6);
-  end;
-  if searchStatus.Visible then
-  begin
-    searchStatus.SetBounds(X-StatusWidth,Y,StatusWidth,H);
-    X:=searchStatus.Left-Scaled(4);
-  end;
-  if btnClearSearch.Visible then
-  begin
-    btnClearSearch.SetBounds(X-Scaled(28),Y,Scaled(28),H);
-    X:=btnClearSearch.Left-Scaled(4);
-  end;
-
-  searchEdit.SetBounds(Scaled(8),Y,max(Scaled(48),X-Scaled(8)),H);
-end;
-
-procedure TAddresslist.ExpandAllClick(Sender: TObject);
-var
-  I: integer;
-begin
-  for I:=0 to Treeview.Items.Count-1 do
-    if (Treeview.Items[I].Parent=nil) and Treeview.Items[I].Visible then
-      Treeview.Items[I].Expand(true);
-end;
-
-procedure TAddresslist.CollapseAllClick(Sender: TObject);
-var
-  I: integer;
-  OldOnCollapsing: TTVCollapsingEvent;
-begin
-  if (AddressListEditor<>nil) and AddressListEditor.Visible then
-    AddressListEditor.CloseEditor(false);
-
-  OldOnCollapsing:=Treeview.OnCollapsing;
-  Treeview.OnCollapsing:=nil;
-  try
-    for I:=Treeview.Items.Count-1 downto 0 do
-      if Treeview.Items[I].Visible and Treeview.Items[I].HasChildren then
-        Treeview.Items[I].Collapse(false);
-  finally
-    Treeview.OnCollapsing:=OldOnCollapsing;
-  end;
-end;
-
-procedure TAddresslist.AddRecordClick(Sender: TObject);
-begin
-  PrepareForStructureChange;
-  addAddressManually('', vtDword, '', true);
-end;
-
-procedure TAddresslist.MoreClick(Sender: TObject);
-var
-  P: TPoint;
-begin
-  P:=btnMore.ClientToScreen(Point(0,btnMore.Height));
-  commandPopup.PopUp(P.X,P.Y);
 end;
 
 procedure TAddresslist.CreateHeaderClick(Sender: TObject);
@@ -1010,8 +424,8 @@ procedure TAddresslist.SetColumnVisibility(AddressVisible,
 begin
   header.Sections[2].Visible:=AddressVisible;
   header.Sections[3].Visible:=TypeVisible;
-  miCommandShowAddress.Checked:=AddressVisible;
-  miCommandShowType.Checked:=TypeVisible;
+  miShowAddress.Checked:=AddressVisible;
+  miShowType.Checked:=TypeVisible;
   if Save then
   begin
     cereg.writeBool('Addresslist: show address column', AddressVisible);
@@ -1040,6 +454,15 @@ begin
   header.Sections[3].Width:=Scaled(100);
   header.Sections[4].Width:=9000000;
   SetColumnVisibility(true,true,true);
+end;
+
+procedure TAddresslist.ShowTableOptions(Anchor: TControl);
+var
+  P: TPoint;
+begin
+  if Anchor=nil then exit;
+  P:=Anchor.ClientToScreen(Point(0,Anchor.Height));
+  tableOptionsPopup.PopUp(P.X,P.Y);
 end;
 
 procedure TAddresslist.AutoFitColumn(ColumnIndex: integer);
@@ -1256,11 +679,7 @@ procedure TAddresslist.SelectAll;
 var i: integer;
 begin
   for i:=0 to count-1 do
-    if filterActive then
-      MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible and
-        MemoryRecordMatchesFilter(MemRecItems[i],searchEdit.Text)
-    else
-      MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible;
+    MemRecItems[i].isSelected:=MemRecItems[i].TreeNode.Visible;
 
   refresh;
 end;
@@ -2331,21 +1750,6 @@ begin
   end;
 end;
 
-procedure TAddresslist.TreeviewKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-begin
-  if (Key=ord('F')) and (ssCtrl in Shift) then
-  begin
-    searchEdit.SetFocus;
-    searchEdit.SelectAll;
-    Key:=0;
-  end
-  else if (Key=VK_ESCAPE) and filterActive then
-  begin
-    ClearFilter;
-    Key:=0;
-  end;
-end;
-
 procedure TAddresslist.TreeviewMouseMove(Sender: TObject; Shift: TShiftState;
   X, Y: Integer);
 var
@@ -2734,7 +2138,7 @@ var
 
   selectednodelist: array of TTreenode;
 begin
-  { Resolve the destination before clearing a filter changes the row at Y. }
+  { Resolve the destination before the tree structure changes. }
   node:=TreeView.GetNodeAt(x,y);
   PrepareForStructureChange;
   setlength(selectednodelist,0);
@@ -2835,7 +2239,6 @@ var shift:TShiftState;
     i: integer;
    // firstnode, lastNode: TTreenode;
 begin
-  if filterUpdating then exit;
   //Because the multiselect of lazarus is horribly broken in the build I use, I've just implemented it myself
 
   shift:=GetKeyShiftState;
@@ -2887,7 +2290,6 @@ begin
       end;
     end;
   end;
-  UpdateContextStatus;
 end;
 
 procedure TAddresslist.doAnimation(sender: TObject);
@@ -3360,11 +2762,6 @@ begin
         sender.Canvas.Line(descriptionstart+sender.canvas.textwidth(memrec.description)+1,(linerect.top+linerect.Bottom) div 2,linerect.right,(linerect.top+linerect.Bottom) div 2)
     end;
 
-    sender.Canvas.Pen.Color:=ColorSet.ButtonBorderColor;
-    sender.Canvas.Pen.Width:=1;
-    sender.Canvas.Line(0,linerect.Bottom-1,linerect.Right,
-      linerect.Bottom-1);
-
     if sender.Focused and node.Selected then
       sender.Canvas.DrawFocusRect(linerect);
 
@@ -3411,9 +2808,7 @@ end;
 procedure TAddressList.DoAutoSize;
 begin
   DisableAutoSizing;
-  header.Height:=max(Scaled(28),header.canvas.GetTextHeight('D')+Scaled(8));
-  commandBar.Height:=max(Scaled(36),searchEdit.Font.GetTextHeight('D')+Scaled(16));
-  contextBar.Height:=max(Scaled(24),contextLabel.Font.GetTextHeight('D')+Scaled(8));
+  header.Height:=max(Scaled(24),header.canvas.GetTextHeight('D')+Scaled(6));
 
   treeview.Indent:=Scaled(20);
   treeview.DefaultItemHeight:=max(Scaled(22),
@@ -3430,6 +2825,8 @@ begin
 end;
 
 constructor TAddresslist.Create(AOwner: TComponent);
+var
+  Separator: TMenuItem;
 begin
   inherited Create(AOwner);
   sortedColumn:=-1;
@@ -3437,125 +2834,6 @@ begin
  // ShowHint:=true;
 
   descriptionhashlist:=TStringHashList.Create(false);
-
-  commandBar:=TPanel.Create(self);
-  commandBar.Name:='TableCommandBar';
-  commandBar.Parent:=self;
-  commandBar.Align:=alTop;
-  commandBar.Height:=Scaled(36);
-  commandBar.BevelOuter:=bvNone;
-  commandBar.Color:=ColorSet.TextBackground;
-  commandBar.ParentColor:=false;
-  commandBar.OnResize:=CommandBarResize;
-
-  searchEdit:=TEdit.Create(commandBar);
-  searchEdit.Name:='TableSearch';
-  searchEdit.Parent:=commandBar;
-  {Setting Name on a newly created TEdit can seed its Text through the LCL
-   caption machinery. Keep the internal component name out of the UI.}
-  searchEdit.Text:='';
-  searchEdit.TextHint:=rsSearchRecords;
-  {Ctrl+F or a mouse click enters search. Do not make an empty search field
-   the application's initial keyboard focus.}
-  searchEdit.TabStop:=false;
-  searchEdit.OnChange:=SearchEditChange;
-  searchEdit.OnKeyDown:=SearchEditKeyDown;
-
-  searchTimer:=TTimer.Create(self);
-  searchTimer.Enabled:=false;
-  searchTimer.Interval:=150;
-  searchTimer.OnTimer:=SearchTimerTimer;
-
-  btnClearSearch:=TButton.Create(commandBar);
-  btnClearSearch.Parent:=commandBar;
-  btnClearSearch.Caption:='x';
-  btnClearSearch.Hint:=rsClearSearch;
-  btnClearSearch.ShowHint:=true;
-  btnClearSearch.OnClick:=ClearSearchClick;
-  btnClearSearch.Visible:=false;
-
-  searchStatus:=TLabel.Create(commandBar);
-  searchStatus.Parent:=commandBar;
-  searchStatus.Alignment:=taRightJustify;
-  searchStatus.Layout:=tlCenter;
-  searchStatus.Font.Color:=ColorSet.InactiveFontColor;
-  searchStatus.ShowHint:=true;
-
-  btnExpandAll:=TButton.Create(commandBar);
-  btnExpandAll.Parent:=commandBar;
-  btnExpandAll.Caption:=rsExpandAll;
-  btnExpandAll.Hint:=rsExpandAll;
-  btnExpandAll.ShowHint:=true;
-  btnExpandAll.OnClick:=ExpandAllClick;
-
-  btnCollapseAll:=TButton.Create(commandBar);
-  btnCollapseAll.Parent:=commandBar;
-  btnCollapseAll.Caption:=rsCollapseAll;
-  btnCollapseAll.Hint:=rsCollapseAll;
-  btnCollapseAll.ShowHint:=true;
-  btnCollapseAll.OnClick:=CollapseAllClick;
-
-  btnAddRecord:=TButton.Create(commandBar);
-  btnAddRecord.Parent:=commandBar;
-  btnAddRecord.Caption:=rsAddRecord;
-  btnAddRecord.Hint:=rsAddRecord;
-  btnAddRecord.ShowHint:=true;
-  btnAddRecord.OnClick:=AddRecordClick;
-
-  btnMore:=TButton.Create(commandBar);
-  btnMore.Parent:=commandBar;
-  btnMore.Caption:='...';
-  btnMore.Hint:=rsMoreTableCommands;
-  btnMore.ShowHint:=true;
-  btnMore.OnClick:=MoreClick;
-
-  contextBar:=TPanel.Create(self);
-  contextBar.Name:='TableContextBar';
-  contextBar.Parent:=self;
-  contextBar.Align:=alTop;
-  contextBar.Top:=commandBar.Height;
-  contextBar.Height:=Scaled(24);
-  contextBar.BevelOuter:=bvNone;
-  contextBar.Color:=ColorSet.TextBackground;
-  contextBar.ParentColor:=false;
-  contextBar.Visible:=false;
-
-  contextLabel:=TLabel.Create(contextBar);
-  contextLabel.Parent:=contextBar;
-  contextLabel.Align:=alClient;
-  contextLabel.AutoSize:=false;
-  contextLabel.BorderSpacing.Left:=Scaled(8);
-  contextLabel.BorderSpacing.Right:=Scaled(8);
-  contextLabel.Layout:=tlCenter;
-  contextLabel.Font.Color:=ColorSet.FontColor;
-  contextLabel.ShowHint:=true;
-
-  commandPopup:=TPopupMenu.Create(commandBar);
-  miCommandCreateHeader:=TMenuItem.Create(commandPopup);
-  miCommandCreateHeader.Caption:=rsCreateHeader;
-  miCommandCreateHeader.OnClick:=CreateHeaderClick;
-  commandPopup.Items.Add(miCommandCreateHeader);
-
-  miCommandShowAddress:=TMenuItem.Create(commandPopup);
-  miCommandShowAddress.Caption:=rsShowAddressColumn;
-  miCommandShowAddress.AutoCheck:=false;
-  miCommandShowAddress.ShowAlwaysCheckable:=true;
-  miCommandShowAddress.OnClick:=ToggleAddressColumnClick;
-  commandPopup.Items.Add(miCommandShowAddress);
-
-  miCommandShowType:=TMenuItem.Create(commandPopup);
-  miCommandShowType.Caption:=rsShowTypeColumn;
-  miCommandShowType.AutoCheck:=false;
-  miCommandShowType.ShowAlwaysCheckable:=true;
-  miCommandShowType.OnClick:=ToggleTypeColumnClick;
-  commandPopup.Items.Add(miCommandShowType);
-
-  miCommandResetColumns:=TMenuItem.Create(commandPopup);
-  miCommandResetColumns.Caption:=rsResetColumnLayout;
-  miCommandResetColumns.OnClick:=ResetColumnsClick;
-  commandPopup.Items.Add(miCommandResetColumns);
-
-  CommandBarResize(commandBar);
 
   treeview:=TTreeviewWithScroll.create(self); //TTreeview.create(self);
   treeview.name:='List';
@@ -3590,7 +2868,6 @@ begin
   treeview.OnDragOver:=TVDragOver;
   treeview.OnDragDrop:=TVDragDrop;
   treeview.OnEndDrag:=TVDragEnd;
-  treeview.OnKeyDown:=TreeviewKeyDown;
   treeview.OnMouseMove:=TreeviewMouseMove;
   treeview.OnMouseLeave:=TreeviewMouseLeave;
   treeview.Indent:=Scaled(20);
@@ -3605,7 +2882,6 @@ begin
 
   treeview.parent:=self;
   treeview.TabOrder:=0;
-  commandBar.TabOrder:=1;
 
   treeview.Options:=treeview.options-[tvoAutoItemHeight];
   treeview.DefaultItemHeight:=max(Scaled(22),treeview.Font.GetTextHeight('D')+Scaled(6));
@@ -3617,8 +2893,7 @@ begin
   header.name:='Header';
   header.parent:=self;
   header.Align:=alTop;
-  header.Top:=commandBar.Height+contextBar.Height;
-  header.Height:=Scaled(28);
+  header.Height:=Scaled(24);
 
   with header.Sections.Add do
   begin
@@ -3662,16 +2937,47 @@ begin
   header.AutoSize:=false;
 
 
-  headerpopup:=TPopupmenu.Create(header);
-  miSortOnClick:=TMenuItem.Create(headerpopup);
+  tableOptionsPopup:=TPopupmenu.Create(header);
+
+  miCreateHeader:=TMenuItem.Create(tableOptionsPopup);
+  miCreateHeader.Caption:=rsCreateHeader;
+  miCreateHeader.OnClick:=CreateHeaderClick;
+  tableOptionsPopup.Items.Add(miCreateHeader);
+
+  Separator:=TMenuItem.Create(tableOptionsPopup);
+  Separator.Caption:='-';
+  tableOptionsPopup.Items.Add(Separator);
+
+  miSortOnClick:=TMenuItem.Create(tableOptionsPopup);
   miSortOnClick.Caption:=rsSortOnClick;
   miSortOnClick.ShowAlwaysCheckable:=true;
   miSortOnClick.Checked:=cereg.readBool('Addresslist: sort on click', true);
   miSortOnClick.AutoCheck:=true;
   miSortOnClick.OnClick:=miSortOnClickClick;
-  headerpopup.Items.Add(miSortOnClick);
+  tableOptionsPopup.Items.Add(miSortOnClick);
 
-  header.PopupMenu:=headerpopup;
+  miShowAddress:=TMenuItem.Create(tableOptionsPopup);
+  miShowAddress.Caption:=rsShowAddressColumn;
+  miShowAddress.ShowAlwaysCheckable:=true;
+  miShowAddress.OnClick:=ToggleAddressColumnClick;
+  tableOptionsPopup.Items.Add(miShowAddress);
+
+  miShowType:=TMenuItem.Create(tableOptionsPopup);
+  miShowType.Caption:=rsShowTypeColumn;
+  miShowType.ShowAlwaysCheckable:=true;
+  miShowType.OnClick:=ToggleTypeColumnClick;
+  tableOptionsPopup.Items.Add(miShowType);
+
+  Separator:=TMenuItem.Create(tableOptionsPopup);
+  Separator.Caption:='-';
+  tableOptionsPopup.Items.Add(Separator);
+
+  miResetColumns:=TMenuItem.Create(tableOptionsPopup);
+  miResetColumns.Caption:=rsResetColumnLayout;
+  miResetColumns.OnClick:=ResetColumnsClick;
+  tableOptionsPopup.Items.Add(miResetColumns);
+
+  header.PopupMenu:=tableOptionsPopup;
 
   SetColumnVisibility(
     cereg.readBool('Addresslist: show address column', true),

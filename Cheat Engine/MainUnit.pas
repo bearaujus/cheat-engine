@@ -292,6 +292,7 @@ type
     actOpenDissectStructure: TAction;
     btnSetSpeedhack2: TButton;
     btnAddAddressManually: TButton;
+    btnTableOptions: TButton;
     btnMemoryView: TButton;
     cbCaseSensitive: TCheckBox;
     cbCopyOnWrite: TCheckBox;
@@ -699,6 +700,7 @@ type
     procedure ScanvalueoldKeyPress(Sender: TObject; var Key: char);
     procedure Calculatenewvaluepart21Click(Sender: TObject);
     procedure btnAddAddressManuallyClick(Sender: TObject);
+    procedure btnTableOptionsClick(Sender: TObject);
     procedure ScanTypeChange(Sender: TObject);
     procedure Value1Click(Sender: TObject);
     procedure VarTypeChange(Sender: TObject);
@@ -6311,7 +6313,9 @@ begin
 
   //allignment fixes for some window style's that mess up with thick borders (like vista)
   differentWidth := logopanel.left - (clientwidth - logopanel.Width);
-  btnAddAddressManually.Left := clientwidth - btnAddAddressManually.Width;
+  btnTableOptions.Left:=clientwidth-btnTableOptions.Width;
+  btnAddAddressManually.Left:=btnTableOptions.Left-
+    btnAddAddressManually.Width-ScaleX(4,96);
   commentbutton.left := clientwidth - commentbutton.Width;
   logopanel.left := clientwidth - logopanel.Width;
   ProgressBar.Width := ProgressBar.Width - differentwidth;
@@ -6738,6 +6742,11 @@ begin
     lastAdded.vartype:=mr.VarType;
     lastAdded.CustomTypeName:=mr.CustomTypeName;
   end;
+end;
+
+procedure TMainForm.btnTableOptionsClick(Sender: TObject);
+begin
+  addresslist.ShowTableOptions(btnTableOptions);
 end;
 
 procedure TMainForm.ScanTypeChange(Sender: TObject);
@@ -8805,6 +8814,8 @@ begin
 
   i:=canvas.TextHeight('ygGxX');
   btnAddAddressManually.ClientHeight:=i+4;
+  btnTableOptions.Width:=ScaleX(28,96);
+  btnTableOptions.ClientHeight:=i+4;
   btnMemoryView.ClientHeight:=i+4;
 
 
@@ -8924,7 +8935,6 @@ begin
       width:=width+(i-foundlist3.clientWidth);
 
     i:=panel5.Height+splitter1.height+addresslist.headers.Height+
-      addresslist.TableCommandBar.Height+addresslist.TableContextBar.Height+
       btnNewScan.Height*4;
     if clientheight<i then
       clientheight:=i;

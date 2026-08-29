@@ -1685,19 +1685,37 @@ object MainForm: TMainForm
       OnKeyDown = Foundlist3KeyDown
     end
     object btnAddAddressManually: TButton
-      AnchorSideRight.Control = Panel5
-      AnchorSideRight.Side = asrBottom
+      AnchorSideRight.Control = btnTableOptions
+      AnchorSideRight.Side = asrLeft
       AnchorSideBottom.Control = Panel5
       AnchorSideBottom.Side = asrBottom
-      Left = 589
+      Left = 557
       Height = 18
       Top = 402
       Width = 145
       Anchors = [akRight, akBottom]
       BorderSpacing.Bottom = 5
+      BorderSpacing.Right = 4
       Caption = 'Add Address Manually'
       OnClick = btnAddAddressManuallyClick
       TabOrder = 16
+    end
+    object btnTableOptions: TButton
+      AnchorSideRight.Control = Panel5
+      AnchorSideRight.Side = asrBottom
+      AnchorSideBottom.Control = Panel5
+      AnchorSideBottom.Side = asrBottom
+      Left = 706
+      Height = 18
+      Hint = 'Table options'
+      Top = 402
+      Width = 28
+      Anchors = [akRight, akBottom]
+      BorderSpacing.Bottom = 5
+      Caption = '…'
+      OnClick = btnTableOptionsClick
+      ShowHint = True
+      TabOrder = 17
     end
     object btnMemoryView: TButton
       AnchorSideLeft.Control = Panel5
@@ -1711,7 +1729,7 @@ object MainForm: TMainForm
       BorderSpacing.Bottom = 5
       Caption = 'Memory View'
       OnClick = btnMemoryViewClick
-      TabOrder = 17
+      TabOrder = 18
     end
     object cbCompareToSavedScan: TCheckBox
       AnchorSideLeft.Control = VarType
@@ -1723,7 +1741,7 @@ object MainForm: TMainForm
       Width = 168
       Caption = 'Compare to first/saved scan'
       OnChange = cbCompareToSavedScanChange
-      TabOrder = 18
+      TabOrder = 19
       Visible = False
     end
     object lblcompareToSavedScan: TLabel
