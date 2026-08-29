@@ -4,12 +4,6 @@ param(
     [ValidateSet('CheckTools', 'Build', 'Run', 'Test', 'Clean')]
     [string]$Action,
 
-    [ValidateSet('x64')]
-    [string]$Architecture = 'x64',
-
-    [ValidateSet('Release 64-Bit')]
-    [string]$BuildMode = 'Release 64-Bit',
-
     [string]$LazarusDir,
 
     [string]$LazBuild
@@ -20,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectFile = Join-Path $repoRoot 'Cheat Engine\cheatengine.lpi'
 $binDir = Join-Path $repoRoot 'Cheat Engine\bin'
+$releaseBuildMode = 'Release 64-Bit'
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'This product supports Windows x64 only.'
@@ -155,7 +150,7 @@ function Assert-Tools {
     $compilerNames = @('ppcx64.exe', 'fpc.exe')
     $compiler = Find-Tool $compilerNames
     if ($null -eq $compiler) {
-        throw "Unable to find an FPC compiler for $Architecture under '$LazarusDir'."
+        throw "Unable to find an x64 FPC compiler under '$LazarusDir'."
     }
 
     $compilerBin = Split-Path -Parent $compiler
@@ -176,16 +171,16 @@ function Invoke-LazBuild([string]$ResolvedLazBuild) {
 
     $projectBytes = [System.IO.File]::ReadAllBytes($projectFile)
     $projectText = [System.Text.Encoding]::UTF8.GetString($projectBytes)
-    $buildModePattern = '(?s)(<Item\d+ Name="' + [regex]::Escape($BuildMode) + '".*?<OptimizationLevel Value=")3(".*?</Item\d+>)'
+    $buildModePattern = '(?s)(</ProjectOptions>\s*<CompilerOptions>.*?<OptimizationLevel Value=")3(")'
     $buildProjectText = [regex]::Replace($projectText, $buildModePattern, '${1}0${2}', 1)
-    Write-Host "Building Windows x64 with mode '$BuildMode'..."
+    Write-Host "Building Windows x64 with mode '$releaseBuildMode'..."
     try {
         if ($buildProjectText -ne $projectText) {
             [System.IO.File]::WriteAllText($projectFile, $buildProjectText, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Using optimization level 0 for FPC 3.2.2 compatibility."
         }
 
-        $buildOutput = @(& $ResolvedLazBuild $projectFile "--build-mode=$BuildMode" 2>&1)
+        $buildOutput = @(& $ResolvedLazBuild $projectFile "--build-mode=$releaseBuildMode" 2>&1)
         $buildExitCode = $LASTEXITCODE
         Write-CompilerOutputAndAssertClean $buildOutput $buildExitCode 'lazbuild'
 
@@ -204,7 +199,7 @@ function Invoke-Tests {
     $compilerNames = @('ppcx64.exe')
     $compiler = Find-Tool $compilerNames
     if ($null -eq $compiler) {
-        throw "Unable to find the FPC test compiler for $Architecture."
+        throw 'Unable to find the x64 FPC test compiler.'
     }
 
     $testSource = Join-Path $repoRoot 'Cheat Engine\tests\memoryrecorddropdowntests.lpr'
@@ -261,7 +256,7 @@ switch ($Action) {
     'Clean' {
         $outputs = @(
             (Join-Path $binDir 'cheatengine-x86_64.exe'),
-            (Join-Path $binDir 'cheatengine-x86_64-SSE4-AVX2.exe')
+            (Join-Path $binDir 'cheatengine-x86_64-debug.exe')
         )
         foreach ($output in $outputs) {
             if (Test-Path -LiteralPath $output -PathType Leaf) {
@@ -272,7 +267,7 @@ switch ($Action) {
 
         $generatedDirectories = @(
             (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64'),
-            (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-SSE4-AVX-win64')
+            (Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64-debug')
         )
         foreach ($generatedDirectory in $generatedDirectories) {
             if (Test-Path -LiteralPath $generatedDirectory -PathType Container) {

@@ -43,7 +43,7 @@ This fork supports Windows x64 only.
 
   2. Run Lazarus and click on `Project->Open Project`. Select `cheatengine.lpi` from the `Cheat Engine` folder as the project.
   3. Click on `Run->Build` or press <kbd>SHIFT+F9</kbd>.
-      * Select the `Release 64-Bit` build mode.
+      * Select `Release 64-Bit` or the unoptimized `Debug 64-Bit` mode.
       * If you want to run or debug from the IDE on Windows you will need to run Lazarus as administrator.
 
   Do not forget to compile secondary projects you'd like to use:
@@ -76,11 +76,11 @@ make test
 make clean
 ```
 
-The build writes `Cheat Engine\bin\cheatengine-x86_64.exe`. `make run` starts it with `Cheat Engine\bin` as its working directory so the checked-in runtime files are used. It passes `NOAUTORUN` and `NOFIRSTTIME`, so local runs do not load autorun extensions or show first-run language/tutorial prompts; normal launches without those arguments are unchanged.
+`make build` always writes the Release x64 executable to `Cheat Engine\bin\cheatengine-x86_64.exe`; `make run` builds and starts that same executable with `Cheat Engine\bin` as its working directory. The IDE-only `Debug 64-Bit` mode writes `Cheat Engine\bin\cheatengine-x86_64-debug.exe`. Local runs pass `NOAUTORUN` and `NOFIRSTTIME`, so they do not load autorun extensions or show first-run language/tutorial prompts; normal launches without those arguments are unchanged.
 
 The supported release treats every compiler warning as a build failure. The documented compatibility exceptions are FPC warnings 4104/4105 at the legacy LCL UTF-8 and Windows UTF-16 boundary, plus FPC note 6058 from optional inline optimizations in the precompiled Lazarus 2.2.2 units. The string boundary requires a dedicated typed-string migration rather than potentially lossy casts; note 6058 does not affect correctness.
 
-For the bundled FPC 3.2.2 compiler, the helper temporarily uses optimization level 0 for the selected build mode. This avoids an intermittent FPC internal compiler error; the committed Lazarus project file is restored byte-for-byte after each build.
+For the bundled FPC 3.2.2 compiler, the helper temporarily uses optimization level 0 for the Release mode. This avoids an intermittent FPC internal compiler error; the committed Lazarus project file is restored byte-for-byte after each build.
 
 The Makefile does not install files, drivers, services, or system-wide settings. The broader install/package workflow will be added separately after the complete distribution scope is defined. To use another Lazarus copy, override the path without changing project files:
 

@@ -4,7 +4,6 @@ ROOT := $(subst /,\,$(CURDIR))
 POWERSHELL ?= powershell.exe
 LAZARUS_DIR ?= $(ROOT)\tools\lazarus
 LAZBUILD ?= $(LAZARUS_DIR)\lazbuild.exe
-BUILD_MODE ?= Release 64-Bit
 
 .PHONY: all help check-tools build run test clean
 
@@ -25,7 +24,7 @@ check-tools:
 	@"$(POWERSHELL)" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)\tools\build.ps1" -Action CheckTools -LazarusDir "$(LAZARUS_DIR)" -LazBuild "$(LAZBUILD)"
 
 build: check-tools
-	@"$(POWERSHELL)" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)\tools\build.ps1" -Action Build -BuildMode "$(BUILD_MODE)" -LazarusDir "$(LAZARUS_DIR)" -LazBuild "$(LAZBUILD)"
+	@"$(POWERSHELL)" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)\tools\build.ps1" -Action Build -LazarusDir "$(LAZARUS_DIR)" -LazBuild "$(LAZBUILD)"
 
 run:
 	@"$(POWERSHELL)" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)\tools\build.ps1" -Action Run -LazarusDir "$(LAZARUS_DIR)" -LazBuild "$(LAZBUILD)"
