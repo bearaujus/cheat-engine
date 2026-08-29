@@ -81,15 +81,26 @@ function Get-GeneratedUnitDirectory {
 function Assert-ExecutableNotRunning {
     $executable = Get-ExpectedExecutable
     $expectedPath = [System.IO.Path]::GetFullPath($executable)
-    foreach ($process in Get-Process -ErrorAction SilentlyContinue) {
+    $expectedProcessName = [System.IO.Path]::GetFileNameWithoutExtension($expectedPath)
+
+    foreach ($process in Get-Process -Name $expectedProcessName -ErrorAction SilentlyContinue) {
+        $processPath = $null
         try {
-            if (-not [string]::IsNullOrWhiteSpace($process.Path) -and
-                [System.IO.Path]::GetFullPath($process.Path).Equals(
-                    $expectedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw "Close the running '$($process.ProcessName)' instance (PID $($process.Id)) before building '$expectedPath'."
-            }
+            $processPath = $process.Path
         } catch [System.ComponentModel.Win32Exception] {
-            # Some system processes do not expose Path to a non-elevated shell.
+            # Elevated processes may hide their executable path from this shell.
+        } catch [System.InvalidOperationException] {
+            # The process exited while it was being inspected.
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($processPath)) {
+            throw "Close the running '$($process.ProcessName)' instance (PID $($process.Id)) before building '$expectedPath'. Its executable path could not be inspected, usually because it is elevated."
+        }
+
+        if ([System.IO.Path]::GetFullPath($processPath).Equals(
+                $expectedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Close the running '$($process.ProcessName)' instance (PID $($process.Id)) before building '$expectedPath'."
         }
     }
 }
