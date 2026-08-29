@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('CheckTools', 'Build', 'Run', 'Test', 'Clean')]
+    [ValidateSet('CheckTools', 'Build', 'Run', 'Smoke', 'Test', 'Clean')]
     [string]$Action,
 
     [string]$LazarusDir,
@@ -238,6 +238,121 @@ function Invoke-Tests {
     }
 }
 
+function Get-ProcessTopLevelWindows([int]$ProcessId) {
+    if ($null -eq ('CheatEngineBuildWindowInspector' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public sealed class CheatEngineBuildWindowInfo
+{
+    public IntPtr Handle;
+    public string ClassName;
+    public string Title;
+    public bool Visible;
+}
+
+public static class CheatEngineBuildWindowInspector
+{
+    private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr window, StringBuilder title, int maxCount);
+
+    public static CheatEngineBuildWindowInfo[] GetWindows(int targetProcessId)
+    {
+        List<CheatEngineBuildWindowInfo> windows = new List<CheatEngineBuildWindowInfo>();
+        EnumWindows(delegate(IntPtr window, IntPtr parameter)
+        {
+            uint processId;
+            GetWindowThreadProcessId(window, out processId);
+            if (processId != (uint)targetProcessId)
+                return true;
+
+            StringBuilder className = new StringBuilder(256);
+            StringBuilder title = new StringBuilder(512);
+            GetClassName(window, className, className.Capacity);
+            GetWindowText(window, title, title.Capacity);
+            windows.Add(new CheatEngineBuildWindowInfo {
+                Handle = window,
+                ClassName = className.ToString(),
+                Title = title.ToString(),
+                Visible = IsWindowVisible(window)
+            });
+            return true;
+        }, IntPtr.Zero);
+        return windows.ToArray();
+    }
+}
+'@
+    }
+
+    return [CheatEngineBuildWindowInspector]::GetWindows($ProcessId)
+}
+
+function Stop-SmokeProcess([System.Diagnostics.Process]$Process) {
+    if ($Process.HasExited) {
+        return
+    }
+
+    if ($Process.CloseMainWindow() -and $Process.WaitForExit(5000)) {
+        return
+    }
+
+    $Process.Kill()
+    $Process.WaitForExit()
+}
+
+function Invoke-StartupSmokeTest([string]$Executable) {
+    Write-Host "Starting startup smoke test: $Executable"
+    $process = Start-Process -FilePath $Executable -WorkingDirectory $binDir `
+        -ArgumentList @('NOAUTORUN', 'NOFIRSTTIME') -PassThru
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+
+    try {
+        while ([DateTime]::UtcNow -lt $deadline) {
+            if ($process.HasExited) {
+                throw "Startup smoke test process exited with code $($process.ExitCode)."
+            }
+
+            $windows = @(Get-ProcessTopLevelWindows $process.Id | Where-Object Visible)
+            $startupDialog = $windows | Where-Object ClassName -eq '#32770' |
+                Select-Object -First 1
+            if ($null -ne $startupDialog) {
+                throw "Startup smoke test found an unexpected dialog: '$($startupDialog.Title)'."
+            }
+
+            $mainWindow = $windows | Where-Object {
+                ($_.ClassName -ne '#32770') -and ($_.Title -like 'Cheat Engine*')
+            } | Select-Object -First 1
+            if ($null -ne $mainWindow) {
+                Write-Host "Startup smoke test passed: '$($mainWindow.Title)'."
+                return
+            }
+
+            Start-Sleep -Milliseconds 250
+        }
+
+        throw 'Startup smoke test timed out waiting for the Cheat Engine main window.'
+    } finally {
+        Stop-SmokeProcess $process
+    }
+}
+
 switch ($Action) {
     'CheckTools' {
         [void](Assert-Tools)
@@ -259,6 +374,11 @@ switch ($Action) {
         if ($process.ExitCode -ne 0) {
             throw "The application exited with code $($process.ExitCode)."
         }
+    }
+    'Smoke' {
+        $resolvedLazBuild = Assert-Tools
+        Invoke-LazBuild $resolvedLazBuild
+        Invoke-StartupSmokeTest (Get-ExpectedExecutable)
     }
     'Test' {
         [void](Assert-Tools)
