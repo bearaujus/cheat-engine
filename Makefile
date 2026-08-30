@@ -13,7 +13,7 @@ help:
 	@echo Cheat Engine Windows x64 build targets:
 	@echo   make check-tools   Validate the repository-local Lazarus toolchain
 	@echo   make build         Build the Windows x64 release
-	@echo   make run           Build and run the Windows x64 release locally
+	@echo   make run           Run the Windows x64 release, rebuilding if stale
 	@echo   make smoke         Build and verify normal application startup
 	@echo   make test          Run the Windows x64 unit tests
 	@echo   make clean         Remove generated x64 build outputs

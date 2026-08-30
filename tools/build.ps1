@@ -15,6 +15,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectFile = Join-Path $repoRoot 'Cheat Engine\cheatengine.lpi'
 $binDir = Join-Path $repoRoot 'Cheat Engine\bin'
 $releaseBuildMode = 'Release 64-Bit'
+$releaseBuildStamp = Join-Path $binDir 'cheatengine-x86_64.buildstamp'
+$releaseBuildStampVersion = 1
+$script:resolvedCompiler = $null
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'This product supports Windows x64 only.'
@@ -76,6 +79,220 @@ function Get-ExpectedExecutable {
 
 function Get-GeneratedUnitDirectory {
     return Join-Path $repoRoot 'Cheat Engine\lib\x86_64-win64'
+}
+
+function Get-ReleaseBuildInputFiles {
+    $projectDir = Split-Path -Parent $projectFile
+    $inputs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    $sourceExtensions = @(
+        '.pas', '.pp', '.inc', '.lfm', '.lrs', '.dfm', '.res', '.rc',
+        '.ico', '.manifest'
+    )
+
+    [void]$inputs.Add([System.IO.Path]::GetFullPath($projectFile))
+    [void]$inputs.Add([System.IO.Path]::GetFullPath(
+        (Join-Path $PSScriptRoot 'build.ps1')))
+
+    [xml]$project = Get-Content -LiteralPath $projectFile -Raw
+    foreach ($unitNode in $project.SelectNodes('//ProjectOptions/Units/*/Filename')) {
+        $filename = $unitNode.GetAttribute('Value')
+        if ([string]::IsNullOrWhiteSpace($filename)) {
+            continue
+        }
+
+        $unitPath = [System.IO.Path]::GetFullPath((Join-Path $projectDir $filename))
+        if (Test-Path -LiteralPath $unitPath -PathType Leaf) {
+            [void]$inputs.Add($unitPath)
+        }
+    }
+
+    # Units in the project root can be found through Pascal's default search
+    # path without appearing in the Lazarus unit list.
+    foreach ($file in Get-ChildItem -LiteralPath $projectDir -File) {
+        if ($sourceExtensions -contains $file.Extension.ToLowerInvariant()) {
+            [void]$inputs.Add($file.FullName)
+        }
+    }
+
+    # Include local unit-search directories while excluding Lazarus macros and
+    # other absolute toolchain paths. These contain units discovered through
+    # uses clauses rather than explicit project entries.
+    foreach ($searchNode in $project.SelectNodes('//OtherUnitFiles')) {
+        foreach ($searchPath in $searchNode.GetAttribute('Value').Split(';')) {
+            $searchPath = $searchPath.Trim()
+            if ([string]::IsNullOrWhiteSpace($searchPath) -or
+                $searchPath.Contains('$(') -or
+                [System.IO.Path]::IsPathRooted($searchPath)) {
+                continue
+            }
+
+            $resolvedSearchPath = [System.IO.Path]::GetFullPath(
+                (Join-Path $projectDir $searchPath))
+            if (-not (Test-Path -LiteralPath $resolvedSearchPath -PathType Container)) {
+                continue
+            }
+
+            foreach ($file in Get-ChildItem -LiteralPath $resolvedSearchPath -Recurse -File) {
+                if ($sourceExtensions -contains $file.Extension.ToLowerInvariant()) {
+                    [void]$inputs.Add($file.FullName)
+                }
+            }
+        }
+    }
+
+    $sortedInputs = [string[]]$inputs
+    [System.Array]::Sort(
+        $sortedInputs,
+        [System.StringComparer]::OrdinalIgnoreCase)
+    return $sortedInputs
+}
+
+function Add-HashBytes(
+    [System.Security.Cryptography.HashAlgorithm]$Hash,
+    [byte[]]$Bytes
+) {
+    if ($Bytes.Length -ne 0) {
+        [void]$Hash.TransformBlock($Bytes, 0, $Bytes.Length, $null, 0)
+    }
+}
+
+function Get-ReleaseBuildFingerprint([string]$ResolvedLazBuild) {
+    $compiler = $script:resolvedCompiler
+    if ([string]::IsNullOrWhiteSpace($compiler) -or
+        -not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+        $compiler = Find-Tool @('ppcx64.exe', 'fpc.exe')
+    }
+    if ($null -eq $compiler) {
+        throw 'Unable to fingerprint the x64 FPC compiler.'
+    }
+    $script:resolvedCompiler = $compiler
+
+    $hash = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $identity = @(
+            "stamp-version=$releaseBuildStampVersion",
+            "build-mode=$releaseBuildMode"
+        )
+        foreach ($tool in @($ResolvedLazBuild, $compiler)) {
+            $toolInfo = Get-Item -LiteralPath $tool
+            $identity += 'tool={0}|{1}|{2}' -f `
+                $toolInfo.FullName.ToLowerInvariant(),
+                $toolInfo.Length,
+                $toolInfo.LastWriteTimeUtc.Ticks
+        }
+        Add-HashBytes $hash ([System.Text.Encoding]::UTF8.GetBytes(
+            (($identity -join "`n") + "`n")))
+
+        $buffer = New-Object byte[] (1024 * 1024)
+        foreach ($inputFile in Get-ReleaseBuildInputFiles) {
+            $fileInfo = Get-Item -LiteralPath $inputFile
+            $header = '{0}|{1}' -f $fileInfo.FullName.ToLowerInvariant(),
+                $fileInfo.Length
+            Add-HashBytes $hash ([System.Text.Encoding]::UTF8.GetBytes(
+                ($header + "`n")))
+
+            $stream = [System.IO.File]::Open(
+                $fileInfo.FullName,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                [System.IO.FileShare]::ReadWrite)
+            try {
+                while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    [void]$hash.TransformBlock($buffer, 0, $read, $null, 0)
+                }
+            } finally {
+                $stream.Dispose()
+            }
+        }
+
+        [void]$hash.TransformFinalBlock([byte[]]::new(0), 0, 0)
+        return ([System.BitConverter]::ToString($hash.Hash)).Replace('-', '')
+    } finally {
+        $hash.Dispose()
+    }
+}
+
+function Remove-ReleaseBuildStamp {
+    if (Test-Path -LiteralPath $releaseBuildStamp -PathType Leaf) {
+        Remove-Item -LiteralPath $releaseBuildStamp -Force
+    }
+}
+
+function Write-ReleaseBuildStamp(
+    [string]$Fingerprint,
+    [string]$Executable
+) {
+    $executableInfo = Get-Item -LiteralPath $Executable
+    $stamp = [ordered]@{
+        Version = $releaseBuildStampVersion
+        Fingerprint = $Fingerprint
+        ExecutableLength = $executableInfo.Length
+        ExecutableLastWriteTimeUtcTicks = $executableInfo.LastWriteTimeUtc.Ticks
+    }
+    $json = $stamp | ConvertTo-Json
+    [System.IO.File]::WriteAllText(
+        $releaseBuildStamp,
+        $json,
+        [System.Text.UTF8Encoding]::new($false))
+}
+
+function Test-ReleaseBuildUpToDate(
+    [string]$Executable,
+    [string]$ResolvedLazBuild
+) {
+    if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
+        Write-Host 'Release executable is missing; rebuilding.'
+        return $false
+    }
+
+    $currentFingerprint = Get-ReleaseBuildFingerprint $ResolvedLazBuild
+    if (Test-Path -LiteralPath $releaseBuildStamp -PathType Leaf) {
+        try {
+            $stamp = Get-Content -LiteralPath $releaseBuildStamp -Raw |
+                ConvertFrom-Json
+            $executableInfo = Get-Item -LiteralPath $Executable
+            if (($stamp.Version -eq $releaseBuildStampVersion) -and
+                ($stamp.Fingerprint -eq $currentFingerprint) -and
+                ($stamp.ExecutableLength -eq $executableInfo.Length) -and
+                ($stamp.ExecutableLastWriteTimeUtcTicks -eq
+                    $executableInfo.LastWriteTimeUtc.Ticks)) {
+                Write-Host 'Release executable is up to date; skipping build.'
+                return $true
+            }
+        } catch {
+            Write-Host "Ignoring invalid release build stamp: $($_.Exception.Message)"
+        }
+
+        Write-Host 'Release build stamp does not match current inputs; rebuilding.'
+        return $false
+    }
+
+    # Adopt a release built directly by Lazarus when it is newer than every
+    # discovered source and tool input. Subsequent runs use exact fingerprints.
+    $executableInfo = Get-Item -LiteralPath $Executable
+    $latestInputTime = [DateTime]::MinValue
+    foreach ($inputFile in Get-ReleaseBuildInputFiles) {
+        $inputTime = (Get-Item -LiteralPath $inputFile).LastWriteTimeUtc
+        if ($inputTime -gt $latestInputTime) {
+            $latestInputTime = $inputTime
+        }
+    }
+    foreach ($tool in @($ResolvedLazBuild, $script:resolvedCompiler)) {
+        $toolTime = (Get-Item -LiteralPath $tool).LastWriteTimeUtc
+        if ($toolTime -gt $latestInputTime) {
+            $latestInputTime = $toolTime
+        }
+    }
+
+    if ($executableInfo.LastWriteTimeUtc -ge $latestInputTime) {
+        Write-ReleaseBuildStamp $currentFingerprint $Executable
+        Write-Host 'Adopted up-to-date release executable; skipping build.'
+        return $true
+    }
+
+    Write-Host 'Release executable predates its build inputs; rebuilding.'
+    return $false
 }
 
 function Assert-ExecutableNotRunning {
@@ -163,6 +380,7 @@ function Assert-Tools {
     if ($null -eq $compiler) {
         throw "Unable to find an x64 FPC compiler under '$LazarusDir'."
     }
+    $script:resolvedCompiler = $compiler
 
     $compilerBin = Split-Path -Parent $compiler
     $env:PATH = "$compilerBin;$LazarusDir;$env:PATH"
@@ -175,6 +393,8 @@ function Assert-Tools {
 
 function Invoke-LazBuild([string]$ResolvedLazBuild) {
     Assert-ExecutableNotRunning
+    Remove-ReleaseBuildStamp
+    $fingerprintBeforeBuild = Get-ReleaseBuildFingerprint $ResolvedLazBuild
     # FPC 3.2.2 can crash internally when this project incrementally reuses
     # units after widely referenced declarations change. A clean unit build is
     # slower but deterministic and avoids presenting compiler AVs to users.
@@ -203,6 +423,11 @@ function Invoke-LazBuild([string]$ResolvedLazBuild) {
         [System.IO.File]::WriteAllBytes($projectFile, $projectBytes)
     }
 
+    $fingerprintAfterBuild = Get-ReleaseBuildFingerprint $ResolvedLazBuild
+    if ($fingerprintAfterBuild -ne $fingerprintBeforeBuild) {
+        throw 'Build inputs changed during compilation. Run the build again.'
+    }
+    Write-ReleaseBuildStamp $fingerprintAfterBuild $executable
     Write-Host "Built: $executable"
 }
 
@@ -364,9 +589,11 @@ switch ($Action) {
     'Run' {
         $resolvedLazBuild = Assert-Tools
         $executable = Get-ExpectedExecutable
-        # Run always builds first. Never launch an older executable after a
-        # failed compilation merely because a stale output file still exists.
-        Invoke-LazBuild $resolvedLazBuild
+        if (-not (Test-ReleaseBuildUpToDate $executable $resolvedLazBuild)) {
+            # A failed compilation cannot leave a valid stamp, so Run never
+            # launches an older executable after detecting changed inputs.
+            Invoke-LazBuild $resolvedLazBuild
+        }
 
         Write-Host "Running $executable"
         $process = Start-Process -FilePath $executable -WorkingDirectory $binDir -ArgumentList @('NOAUTORUN', 'NOFIRSTTIME') -PassThru
@@ -388,6 +615,7 @@ switch ($Action) {
         $outputs = @(
             (Join-Path $binDir 'cheatengine-x86_64.exe'),
             (Join-Path $binDir 'cheatengine-x86_64.dbg'),
+            $releaseBuildStamp,
             (Join-Path $binDir 'cheatengine-x86_64-debug.exe'),
             (Join-Path $binDir 'cheatengine-x86_64-debug.dbg'),
             (Join-Path $binDir 'cheatengine-i386.exe'),
